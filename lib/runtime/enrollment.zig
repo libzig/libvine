@@ -62,6 +62,15 @@ pub const EnrollmentState = struct {
         }
         return false;
     }
+
+    pub fn routeEntryForMembership(_: EnrollmentState, membership: core.membership.PeerMembership) core.route_table.RouteEntry {
+        return .{
+            .prefix = membership.prefix,
+            .peer_id = membership.peer_id,
+            .epoch = membership.epoch,
+            .preference = .relay,
+        };
+    }
 };
 
 fn prefixEql(left: core.types.VinePrefix, right: core.types.VinePrefix) bool {
@@ -274,4 +283,29 @@ test "enrollment state withdraws remote membership cleanly" {
 
     try std.testing.expect(state.withdrawRemoteMembership(&memberships, peer));
     try std.testing.expectEqual(@as(?i64, 0), memberships[0].expires_at_ms);
+}
+
+test "enrollment state converts accepted membership into route table entry" {
+    const peer = core.types.PeerId.init(.{0x77} ** core.types.peer_id_len);
+    const state = EnrollmentState{
+        .local_membership = .{
+            .network_id = try core.types.NetworkId.init("devnet"),
+            .peer_id = peer,
+            .prefix = try core.types.VinePrefix.parse("10.42.0.0/24"),
+            .epoch = core.types.MembershipEpoch.init(1),
+            .attached_at_ms = 0,
+        },
+        .admission_policy = .{ .allowed_peers = &.{peer} },
+        .enrolled_peers = &.{},
+    };
+    const membership = core.membership.PeerMembership{
+        .peer_id = peer,
+        .prefix = try core.types.VinePrefix.parse("10.42.7.0/24"),
+        .epoch = core.types.MembershipEpoch.init(3),
+        .announced_at_ms = 7,
+    };
+
+    const entry = state.routeEntryForMembership(membership);
+    try std.testing.expect(entry.peer_id.eql(peer));
+    try std.testing.expectEqual(core.route_table.RouteEntry.Preference.relay, entry.preference);
 }

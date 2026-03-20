@@ -163,6 +163,8 @@ pub const Node = struct {
             .enrolled_peers = enrolled_peers_buffer[0..enrolled_count],
         };
         if (!state.refreshRemoteMembership(network_id, self.remote_memberships, membership)) return false;
+        const route_entry = state.routeEntryForMembership(membership);
+        self.installRouteEntry(route_entry);
         self.emit(.{ .topology_change = membership.peer_id });
         return true;
     }
@@ -246,6 +248,17 @@ pub const Node = struct {
         if (self.event_callback) |callback| {
             callback(self.event_context, event);
         }
+    }
+
+    fn installRouteEntry(self: *Node, entry: core.route_table.RouteEntry) void {
+        self.route_table.upsert(entry) catch {
+            for (self.route_table.entries) |*existing| {
+                if (existing.epoch.value == 0 and existing.generation == 0 and !existing.tombstone) {
+                    existing.* = entry;
+                    return;
+                }
+            }
+        };
     }
 };
 
@@ -447,6 +460,45 @@ test "node refreshes and withdraws remote membership state" {
     try std.testing.expectEqual(@as(u64, 2), node.remote_memberships[0].epoch.value);
     try std.testing.expect(node.withdrawRemoteMembership(core.types.PeerId.init(.{0x55} ** core.types.peer_id_len)));
     try std.testing.expect(node.route_table.entries[0].tombstone);
+}
+
+test "node refresh installs a route entry for accepted membership" {
+    var routes = [_]core.route_table.RouteEntry{.{
+        .prefix = try core.types.VinePrefix.parse("0.0.0.0/0"),
+        .peer_id = core.types.PeerId.init(.{0} ** core.types.peer_id_len),
+        .epoch = core.types.MembershipEpoch.init(0),
+        .preference = .relay,
+        .generation = 0,
+        .tombstone = false,
+    }};
+    var sessions = [_]core.session_table.ActiveSession{};
+    var memberships = [_]core.membership.PeerMembership{std.mem.zeroes(core.membership.PeerMembership)};
+    const peer = core.types.PeerId.init(.{0x99} ** core.types.peer_id_len);
+    const prefix = try core.types.VinePrefix.parse("10.77.0.0/24");
+
+    var node = try Node.init(.{
+        .network_id = try core.types.NetworkId.init("devnet"),
+        .allowlist = &.{peer},
+        .seed_records = &.{.{ .peer_id = peer, .published_prefix = prefix }},
+        .tun = .{
+            .ifname = [_]u8{ 'v', 'n', 'r', 0 } ++ ([_]u8{0} ** 12),
+            .local_address = core.types.VineAddress.init(.{ 10, 66, 0, 1 }),
+            .prefix_len = 24,
+        },
+    }, .{
+        .routes = &routes,
+        .sessions = &sessions,
+        .memberships = &memberships,
+    });
+
+    try std.testing.expect(node.refreshRemoteMembership(.{
+        .peer_id = peer,
+        .prefix = prefix,
+        .epoch = core.types.MembershipEpoch.init(1),
+        .announced_at_ms = 1,
+    }));
+    try std.testing.expect(node.route_table.entries[0].peer_id.eql(peer));
+    try std.testing.expect(node.route_table.entries[0].prefix.contains(core.types.VineAddress.init(.{ 10, 77, 0, 9 })));
 }
 
 test "node emits lifecycle and topology events through callback" {
