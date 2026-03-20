@@ -440,6 +440,11 @@ test "node refreshes and withdraws remote membership state" {
 
     var node = try Node.init(.{
         .network_id = try core.types.NetworkId.init("devnet"),
+        .allowlist = &.{core.types.PeerId.init(.{0x55} ** core.types.peer_id_len)},
+        .seed_records = &.{.{
+            .peer_id = core.types.PeerId.init(.{0x55} ** core.types.peer_id_len),
+            .published_prefix = try core.types.VinePrefix.parse("10.65.0.0/24"),
+        }},
         .tun = .{
             .ifname = [_]u8{ 'v', 'n', '6', 0 } ++ ([_]u8{0} ** 12),
             .local_address = core.types.VineAddress.init(.{ 10, 66, 0, 1 }),
@@ -501,6 +506,77 @@ test "node refresh installs a route entry for accepted membership" {
     try std.testing.expect(node.route_table.entries[0].prefix.contains(core.types.VineAddress.init(.{ 10, 77, 0, 9 })));
 }
 
+test "node handles multi peer membership updates with deterministic ownership" {
+    var routes = [_]core.route_table.RouteEntry{
+        .{
+            .prefix = try core.types.VinePrefix.parse("0.0.0.0/0"),
+            .peer_id = core.types.PeerId.init(.{0} ** core.types.peer_id_len),
+            .epoch = core.types.MembershipEpoch.init(0),
+            .preference = .relay,
+            .generation = 0,
+            .tombstone = false,
+        },
+        .{
+            .prefix = try core.types.VinePrefix.parse("0.0.0.0/0"),
+            .peer_id = core.types.PeerId.init(.{0} ** core.types.peer_id_len),
+            .epoch = core.types.MembershipEpoch.init(0),
+            .preference = .relay,
+            .generation = 0,
+            .tombstone = false,
+        },
+    };
+    var sessions = [_]core.session_table.ActiveSession{};
+    var memberships = [_]core.membership.PeerMembership{
+        std.mem.zeroes(core.membership.PeerMembership),
+        std.mem.zeroes(core.membership.PeerMembership),
+    };
+    const peer_a = core.types.PeerId.init(.{0x31} ** core.types.peer_id_len);
+    const peer_b = core.types.PeerId.init(.{0x32} ** core.types.peer_id_len);
+    const peer_c = core.types.PeerId.init(.{0x33} ** core.types.peer_id_len);
+
+    var node = try Node.init(.{
+        .network_id = try core.types.NetworkId.init("devnet"),
+        .allowlist = &.{ peer_a, peer_b },
+        .seed_records = &.{
+            .{ .peer_id = peer_a, .published_prefix = try core.types.VinePrefix.parse("10.80.1.0/24") },
+            .{ .peer_id = peer_b, .published_prefix = try core.types.VinePrefix.parse("10.80.2.0/24") },
+        },
+        .tun = .{
+            .ifname = [_]u8{ 'v', 'n', 'm', 0 } ++ ([_]u8{0} ** 12),
+            .local_address = core.types.VineAddress.init(.{ 10, 80, 0, 1 }),
+            .prefix_len = 24,
+        },
+    }, .{
+        .routes = &routes,
+        .sessions = &sessions,
+        .memberships = &memberships,
+    });
+
+    try std.testing.expect(node.refreshRemoteMembership(.{
+        .peer_id = peer_a,
+        .prefix = try core.types.VinePrefix.parse("10.80.1.0/24"),
+        .epoch = core.types.MembershipEpoch.init(1),
+        .announced_at_ms = 1,
+    }));
+    try std.testing.expect(node.refreshRemoteMembership(.{
+        .peer_id = peer_b,
+        .prefix = try core.types.VinePrefix.parse("10.80.2.0/24"),
+        .epoch = core.types.MembershipEpoch.init(1),
+        .announced_at_ms = 2,
+    }));
+    try std.testing.expect(!node.refreshRemoteMembership(.{
+        .peer_id = peer_c,
+        .prefix = try core.types.VinePrefix.parse("10.80.3.0/24"),
+        .epoch = core.types.MembershipEpoch.init(1),
+        .announced_at_ms = 3,
+    }));
+
+    try std.testing.expect(node.remote_memberships[0].peer_id.eql(peer_a));
+    try std.testing.expect(node.remote_memberships[1].peer_id.eql(peer_b));
+    try std.testing.expect(node.route_table.entries[0].peer_id.eql(peer_a));
+    try std.testing.expect(node.route_table.entries[1].peer_id.eql(peer_b));
+}
+
 test "node emits lifecycle and topology events through callback" {
     const Capture = struct {
         logs: usize = 0,
@@ -539,6 +615,11 @@ test "node emits lifecycle and topology events through callback" {
 
     var node = try Node.init(.{
         .network_id = try core.types.NetworkId.init("devnet"),
+        .allowlist = &.{core.types.PeerId.init(.{0x77} ** core.types.peer_id_len)},
+        .seed_records = &.{.{
+            .peer_id = core.types.PeerId.init(.{0x77} ** core.types.peer_id_len),
+            .published_prefix = try core.types.VinePrefix.parse("10.67.0.0/24"),
+        }},
         .tun = .{
             .ifname = [_]u8{ 'v', 'n', '7', 0 } ++ ([_]u8{0} ** 12),
             .local_address = core.types.VineAddress.init(.{ 10, 68, 0, 1 }),

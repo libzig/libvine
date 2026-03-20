@@ -34,6 +34,7 @@ pub const EnrollmentState = struct {
         record: core.membership.PeerMembership,
     ) bool {
         if (!self.local_membership.network_id.eql(network_id)) return false;
+        if (!self.allowsPeer(record.peer_id)) return false;
         if (self.ownedPrefixFor(record.peer_id)) |owned_prefix| {
             if (!prefixEql(owned_prefix, record.prefix)) return false;
         }
