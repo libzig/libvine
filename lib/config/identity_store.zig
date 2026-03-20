@@ -5,6 +5,11 @@ const identity_adapter = @import("../integration/identity_adapter.zig");
 pub const file_magic = "libvine-identity-v1";
 pub const expected_dir_mode: u32 = 0o700;
 pub const expected_file_mode: u32 = 0o600;
+pub const field_format = "format";
+pub const field_seed = "seed";
+pub const field_public_key = "public_key";
+pub const field_peer_id = "peer_id";
+pub const field_fingerprint = "fingerprint";
 
 pub const StoredIdentity = struct {
     seed: [32]u8,
@@ -130,6 +135,21 @@ test "identity store encodes and decodes persisted seed identity" {
     try std.testing.expectEqualSlices(u8, &stored.seed, &decoded.seed);
     try std.testing.expectEqualSlices(u8, &stored.bound.key_pair.public_key, &decoded.bound.key_pair.public_key);
     try std.testing.expect(stored.bound.peer_id.eql(decoded.bound.peer_id));
+}
+
+test "identity store serialized format and permission expectations stay stable" {
+    const allocator = std.testing.allocator;
+    const stored = try fromSeed([_]u8{0x22} ** 32);
+    const encoded = try encode(allocator, stored);
+    defer allocator.free(encoded);
+
+    try std.testing.expect(std.mem.indexOf(u8, encoded, field_format ++ "=" ++ file_magic) != null);
+    try std.testing.expect(std.mem.indexOf(u8, encoded, field_seed ++ "=") != null);
+    try std.testing.expect(std.mem.indexOf(u8, encoded, field_public_key ++ "=") != null);
+    try std.testing.expect(std.mem.indexOf(u8, encoded, field_peer_id ++ "=") != null);
+    try std.testing.expect(std.mem.indexOf(u8, encoded, field_fingerprint ++ "=") != null);
+    try std.testing.expectEqual(@as(u32, 0o700), expected_dir_mode);
+    try std.testing.expectEqual(@as(u32, 0o600), expected_file_mode);
 }
 
 test "identity store writes generated identities to disk" {
