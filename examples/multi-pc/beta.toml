@@ -1,0 +1,34 @@
+[node]
+name = "beta"
+network_id = "home-net"
+identity_path = "/var/lib/libvine/beta.identity"
+
+[tun]
+name = "vine0"
+address = "10.42.1.1"
+prefix_len = 24
+mtu = 1400
+
+[[bootstrap_peers]]
+peer_id = "relay-public-id"
+address = "udp://198.51.100.40:4100"
+
+[[allowed_peers]]
+peer_id = "alpha-public-id"
+prefix = "10.42.0.0/24"
+relay_capable = false
+
+[[allowed_peers]]
+peer_id = "gamma-public-id"
+prefix = "10.42.2.0/24"
+relay_capable = false
+
+[[allowed_peers]]
+peer_id = "relay-public-id"
+prefix = "10.42.254.0/24"
+relay_capable = true
+
+[policy]
+strict_allowlist = true
+allow_relay = true
+allow_signaling_upgrade = true
