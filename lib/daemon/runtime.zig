@@ -171,6 +171,22 @@ pub fn shutdownSignal() u8 {
     return std.posix.SIG.TERM;
 }
 
+pub fn requestReload(pid: std.process.Child.Id) !void {
+    try std.posix.kill(pid, std.posix.SIG.HUP);
+}
+
+pub fn reloadSignal() u8 {
+    return std.posix.SIG.HUP;
+}
+
+pub fn requestDiagnostics(pid: std.process.Child.Id) !void {
+    try std.posix.kill(pid, std.posix.SIG.USR1);
+}
+
+pub fn diagnosticsSignal() u8 {
+    return std.posix.SIG.USR1;
+}
+
 fn parsePhase(value: []const u8) ?DaemonPhase {
     inline for (std.meta.tags(DaemonPhase)) |phase| {
         if (std.mem.eql(u8, value, @tagName(phase))) return phase;
@@ -291,4 +307,9 @@ test "daemon runtime writes reads and removes pidfiles" {
 
 test "daemon runtime uses sigterm for clean shutdown requests" {
     try std.testing.expectEqual(std.posix.SIG.TERM, shutdownSignal());
+}
+
+test "daemon runtime defines reload and diagnostics signals" {
+    try std.testing.expectEqual(std.posix.SIG.HUP, reloadSignal());
+    try std.testing.expectEqual(std.posix.SIG.USR1, diagnosticsSignal());
 }
