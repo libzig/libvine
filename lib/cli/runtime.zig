@@ -800,6 +800,12 @@ test "runtime cli parses common args with json format" {
     try std.testing.expectEqual(OutputMode.json, parsed.output_mode);
 }
 
+test "runtime cli parses explicit text output mode" {
+    const parsed = try parseCommonArgs(&.{ "--format", "text" }, "/etc/libvine/vine.toml");
+    try std.testing.expectEqualStrings("/etc/libvine/vine.toml", parsed.config_path);
+    try std.testing.expectEqual(OutputMode.text, parsed.output_mode);
+}
+
 test "runtime cli down rejects unexpected arguments" {
     try std.testing.expectError(error.InvalidArguments, runDown(&.{ "--now" }, "/run/libvine/vine.pid"));
 }
@@ -1029,6 +1035,8 @@ test "runtime cli parses ping arguments" {
     try std.testing.expectEqualStrings("/tmp/vine.toml", parsed.config_path);
     try std.testing.expect(parsed.destination.eql(try core.types.VineAddress.parse("10.42.9.7")));
     try std.testing.expectEqual(OutputMode.json, parsed.output_mode);
+    const text_mode = try parsePingArgs(&.{ "--format", "text", "10.42.9.7" }, "/etc/libvine/vine.toml");
+    try std.testing.expectEqual(OutputMode.text, text_mode.output_mode);
     try std.testing.expectError(error.InvalidArguments, parsePingArgs(&.{}, "/etc/libvine/vine.toml"));
 }
 
