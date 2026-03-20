@@ -28,11 +28,23 @@ pub fn build(b: *std.Build) void {
     });
     const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
 
+    const smoke_test_module = b.createModule(.{
+        .root_source_file = b.path("test/smoke.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    smoke_test_module.addImport("libvine", libvine_export);
+
+    const smoke_tests = b.addTest(.{
+        .root_module = smoke_test_module,
+    });
+    const run_smoke_tests = b.addRunArtifact(smoke_tests);
+
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_lib_unit_tests.step);
+    test_step.dependOn(&run_smoke_tests.step);
 
     const examples_step = b.step("examples", "Build libvine examples");
 
-    _ = libvine_export;
     _ = examples_step;
 }
