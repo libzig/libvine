@@ -12,6 +12,7 @@
 - [Diagnostics](./diagnostics.md)
 - [Multi-PC Showcase](./showcase.md)
 - [Copying To Multiple Machines](./copying-to-machines.md)
+- [Bootstrap And Relay](./bootstrap-and-relay.md)
 - [Operations](./operations.md)
 - [Architecture](./architecture.md)
 - [MVP](./mvp.md)
