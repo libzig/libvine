@@ -71,7 +71,7 @@ fn parseCommand(arg: []const u8) ?Command {
 fn dispatch(command: Command, args: []const []const u8) !void {
     switch (command) {
         .identity => try libvine.cli.identity.run(args, default_identity_path),
-        .config => std.debug.print("vine config: not implemented yet\n", .{}),
+        .config => try libvine.cli.config.run(args, default_config_path),
         .daemon => std.debug.print("vine daemon: not implemented yet\n", .{}),
         .status => std.debug.print("vine status: not implemented yet\n", .{}),
         .diagnostics => std.debug.print("vine diagnostics: not implemented yet\n", .{}),
