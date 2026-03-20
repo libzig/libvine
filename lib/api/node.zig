@@ -20,6 +20,14 @@ pub const BootstrapResult = struct {
     peer_count: usize,
 };
 
+pub const Event = union(enum) {
+    log: []const u8,
+    diagnostic: []const u8,
+    topology_change: core.types.PeerId,
+};
+
+pub const EventCallback = *const fn (?*anyopaque, Event) void;
+
 pub const Node = struct {
     config: config.NodeConfig,
     local_peer_id: core.types.PeerId,
@@ -32,6 +40,8 @@ pub const Node = struct {
     running: bool = false,
     last_bootstrap: ?BootstrapResult = null,
     advertised_local_membership: bool = false,
+    event_callback: ?EventCallback = null,
+    event_context: ?*anyopaque = null,
 
     pub fn init(node_config: config.NodeConfig, buffers: RuntimeBuffers) !Node {
         var tun = try linux.tun.TunDevice.open();
@@ -58,11 +68,13 @@ pub const Node = struct {
     pub fn start(self: *Node) void {
         self.running = true;
         _ = self.advertiseLocalMembership();
+        self.emit(.{ .log = "node started" });
     }
 
     pub fn stop(self: *Node) void {
         self.running = false;
         self.tun.fd = -1;
+        self.emit(.{ .log = "node stopped" });
     }
 
     pub fn bootstrap(self: *Node) ?BootstrapResult {
@@ -72,6 +84,7 @@ pub const Node = struct {
                 .peer_count = self.config.bootstrap_peers.len,
             };
             self.last_bootstrap = result;
+            self.emit(.{ .diagnostic = "bootstrap static peers" });
             return result;
         }
 
@@ -81,6 +94,7 @@ pub const Node = struct {
                 .peer_count = self.config.seed_records.len,
             };
             self.last_bootstrap = result;
+            self.emit(.{ .diagnostic = "bootstrap seed records" });
             return result;
         }
 
@@ -94,10 +108,16 @@ pub const Node = struct {
         return local_membership;
     }
 
+    pub fn setEventCallback(self: *Node, callback: EventCallback, context: ?*anyopaque) void {
+        self.event_callback = callback;
+        self.event_context = context;
+    }
+
     pub fn refreshRemoteMembership(self: *Node, membership: core.membership.PeerMembership) bool {
         for (self.remote_memberships) |*existing| {
             if (existing.peer_id.eql(membership.peer_id)) {
                 existing.* = membership;
+                self.emit(.{ .topology_change = membership.peer_id });
                 return true;
             }
         }
@@ -108,10 +128,17 @@ pub const Node = struct {
         for (self.remote_memberships) |*membership| {
             if (membership.peer_id.eql(peer_id)) {
                 membership.expires_at_ms = 0;
+                self.emit(.{ .topology_change = peer_id });
                 return self.route_table.withdraw(membership.prefix);
             }
         }
         return false;
+    }
+
+    fn emit(self: *Node, event: Event) void {
+        if (self.event_callback) |callback| {
+            callback(self.event_context, event);
+        }
     }
 };
 
@@ -289,4 +316,71 @@ test "node refreshes and withdraws remote membership state" {
     try std.testing.expectEqual(@as(u64, 2), node.remote_memberships[0].epoch.value);
     try std.testing.expect(node.withdrawRemoteMembership(core.types.PeerId.init(.{0x55} ** core.types.peer_id_len)));
     try std.testing.expect(node.route_table.entries[0].tombstone);
+}
+
+test "node emits lifecycle and topology events through callback" {
+    const Capture = struct {
+        logs: usize = 0,
+        diagnostics: usize = 0,
+        topology_changes: usize = 0,
+
+        fn handle(context: ?*anyopaque, event: Event) void {
+            const self: *@This() = @ptrCast(@alignCast(context.?));
+            switch (event) {
+                .log => self.logs += 1,
+                .diagnostic => self.diagnostics += 1,
+                .topology_change => self.topology_changes += 1,
+            }
+        }
+    };
+
+    var routes = [_]core.route_table.RouteEntry{
+        .{
+            .prefix = try core.types.VinePrefix.parse("10.67.0.0/24"),
+            .peer_id = core.types.PeerId.init(.{0x77} ** core.types.peer_id_len),
+            .session_id = core.types.SessionId.init(21),
+            .epoch = core.types.MembershipEpoch.init(1),
+            .preference = .direct,
+        },
+    };
+    var sessions = [_]core.session_table.ActiveSession{};
+    var memberships = [_]core.membership.PeerMembership{
+        .{
+            .peer_id = core.types.PeerId.init(.{0x77} ** core.types.peer_id_len),
+            .prefix = try core.types.VinePrefix.parse("10.67.0.0/24"),
+            .epoch = core.types.MembershipEpoch.init(1),
+            .announced_at_ms = 1,
+        },
+    };
+    var capture = Capture{};
+
+    var node = try Node.init(.{
+        .network_id = try core.types.NetworkId.init("devnet"),
+        .tun = .{
+            .ifname = [_]u8{ 'v', 'n', '7', 0 } ++ ([_]u8{0} ** 12),
+            .local_address = core.types.VineAddress.init(.{ 10, 68, 0, 1 }),
+            .prefix_len = 24,
+        },
+        .bootstrap_peers = &.{.{ .peer_id = core.types.PeerId.init(.{0x77} ** core.types.peer_id_len), .address = "seed://peer-b" }},
+    }, .{
+        .routes = &routes,
+        .sessions = &sessions,
+        .memberships = &memberships,
+    });
+    node.setEventCallback(Capture.handle, &capture);
+
+    node.start();
+    _ = node.bootstrap();
+    _ = node.refreshRemoteMembership(.{
+        .peer_id = core.types.PeerId.init(.{0x77} ** core.types.peer_id_len),
+        .prefix = try core.types.VinePrefix.parse("10.67.0.0/24"),
+        .epoch = core.types.MembershipEpoch.init(2),
+        .announced_at_ms = 2,
+    });
+    _ = node.withdrawRemoteMembership(core.types.PeerId.init(.{0x77} ** core.types.peer_id_len));
+    node.stop();
+
+    try std.testing.expectEqual(@as(usize, 2), capture.logs);
+    try std.testing.expectEqual(@as(usize, 1), capture.diagnostics);
+    try std.testing.expectEqual(@as(usize, 2), capture.topology_changes);
 }
