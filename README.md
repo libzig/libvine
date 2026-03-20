@@ -1,28 +1,60 @@
 # libvine
 
-`libvine` is a Zig virtual network library for building small authenticated IPv4 overlays on top of the existing `libzig` stack.
+`libvine` is the repo behind `vine`, a Linux overlay VPN binary built in Zig on top of the `libzig` stack.
 
-For the MVP, `libvine` is intentionally narrow:
+The primary product is now:
 
-- Linux only
-- IPv4 L3 overlay semantics
-- one overlay network per process
-- small peer sets
-- static or bootstrap-assisted membership
+- one `vine` binary you can copy to multiple Linux PCs
+- one `libself` identity per machine
+- one TOML config per machine
+- one overlay network with explicit prefix ownership
+- direct sessions when possible, relay fallback when necessary
 
-`libvine` is not a replacement control plane. It uses `libmesh` extensively for discovery, signaling, route selection, session setup, and relay fallback. `libvine` owns overlay membership policy, virtual addressing, packet forwarding, and Linux TUN integration.
+The library remains important, but the intended operator experience is:
+
+1. build `vine`
+2. copy the same binary to each Linux host
+3. generate one identity per host
+4. install one host-specific config per host
+5. start the daemon
+6. inspect peers, routes, sessions, counters, and snapshots
+
+## Build
+
+```text
+nix develop -c make build
+```
+
+This produces the `vine` binary through `zig build vine`.
+
+## Quick Start
+
+Use the multi-PC showcase under [`examples/multi-pc/`](./examples/multi-pc/) as the reference deployment:
+
+- `alpha`
+- `beta`
+- `gamma`
+- `relay`
+
+Typical first steps on a host:
+
+```text
+vine identity init
+vine config validate -c /etc/libvine/vine.toml
+vine doctor -c /etc/libvine/vine.toml
+vine daemon run -c /etc/libvine/vine.toml
+```
 
 ## Identity Versus Addressing
 
-`libvine` does not treat overlay IP addresses as peer identity.
+`vine` does not treat overlay IP addresses as peer identity.
 
 - `libself` identity answers who a node is
 - `NetworkId` answers which overlay network the node belongs to
 - `VinePrefix` answers which overlay IP range the node advertises
 - `libmesh` answers which current path should be used to reach that node
 
-This separation is critical for a real VPN deployment across multiple machines: peer trust and allowlisting
-must bind to `libself` identity first, and only then to overlay addressing policy.
+Peer trust and allowlisting must bind to `libself` identity first, and only then to overlay addressing policy.
 
 ## Stack Position
 
@@ -32,10 +64,20 @@ must bind to `libself` identity first, and only then to overlay addressing polic
 - `libfast`: encrypted transport for control and packet carriage
 - `libvine`: overlay network semantics and Linux host integration
 
-## MVP Direction
-
-The first milestone is a coherent library skeleton with stable public boundaries, tests that compile, and enough documentation for downstream consumers to follow the intended architecture before deeper control-plane and data-plane work lands.
+`libvine` is not a replacement control plane. It uses `libmesh` for discovery, signaling, route selection,
+session setup, and relay fallback. `libvine` owns overlay membership policy, virtual addressing, packet
+forwarding, and Linux TUN integration.
 
 ## Documentation
 
-The project documentation now lives in the mdBook under [`book/`](./book/). The entry point is [`book/src/SUMMARY.md`](./book/src/SUMMARY.md).
+The project documentation lives in the mdBook under [`book/`](./book/).
+
+Useful entry points:
+
+- [`book/src/SUMMARY.md`](./book/src/SUMMARY.md)
+- [`book/src/showcase.md`](./book/src/showcase.md)
+- [`book/src/copying-to-machines.md`](./book/src/copying-to-machines.md)
+- [`book/src/bootstrap-and-relay.md`](./book/src/bootstrap-and-relay.md)
+- [`book/src/enrollment-across-machines.md`](./book/src/enrollment-across-machines.md)
+- [`book/src/lan-deployment.md`](./book/src/lan-deployment.md)
+- [`book/src/internet-deployment.md`](./book/src/internet-deployment.md)
