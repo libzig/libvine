@@ -61,6 +61,10 @@ pub const TunRuntime = struct {
         self.last_session = session;
         return session;
     }
+
+    pub fn receivePacketFromSession(self: *TunRuntime, peer_id: core.types.PeerId, packet: []const u8) bool {
+        return self.node.receivePacket(peer_id, packet);
+    }
 };
 
 test "tun runtime captures node and route installation storage" {
@@ -262,4 +266,45 @@ test "tun runtime sends packets over the preferred session" {
     try std.testing.expectEqual(@as(u64, 51), runtime.sendPacketOverPreferredSession(&packet).?.session_id.value);
     try std.testing.expectEqualSlices(u8, &packet, runtime.last_sent_packet);
     try std.testing.expectEqual(@as(u64, 51), runtime.last_session.?.session_id.value);
+}
+
+test "tun runtime receives packets from sessions and injects them into tun" {
+    const std = @import("std");
+
+    const peer = core.types.PeerId.init(.{0x55} ** core.types.peer_id_len);
+    var routes = [_]core.route_table.RouteEntry{};
+    var sessions = [_]core.session_table.ActiveSession{
+        .{
+            .peer_id = peer,
+            .session_id = .{ .value = 61 },
+            .preference = .direct,
+        },
+    };
+    var memberships = [_]core.membership.PeerMembership{};
+    var installed = [_]linux.routes.InstalledRoute{};
+
+    var node = try api.node.Node.init(.{
+        .network_id = try core.types.NetworkId.init("home-net"),
+        .tun = .{
+            .ifname = [_]u8{ 'v', 'i', 'n', 'e', '5', 0 } ++ ([_]u8{0} ** 10),
+            .local_address = try core.types.VineAddress.parse("10.42.0.1"),
+            .prefix_len = 24,
+            .mtu = 1400,
+        },
+    }, .{
+        .routes = &routes,
+        .sessions = &sessions,
+        .memberships = &memberships,
+    });
+    var runtime = TunRuntime.init(&node, &installed);
+    const packet = [_]u8{
+        0x45, 0x00, 0x00, 0x14,
+        0x00, 0x00, 0x00, 0x00,
+        0x40, 0x00, 0x00, 0x00,
+        10, 42, 1, 7,
+        10, 42, 0, 1,
+    } ++ ([_]u8{0} ** 4);
+
+    try std.testing.expect(runtime.receivePacketFromSession(peer, &packet));
+    try std.testing.expectEqualSlices(u8, &packet, runtime.node.tun.tx_buffer);
 }
