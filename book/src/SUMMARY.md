@@ -2,6 +2,7 @@
 
 - [Introduction](./index.md)
 - [CLI](./cli.md)
+- [Operations](./operations.md)
 - [Architecture](./architecture.md)
 - [MVP](./mvp.md)
 - [Addressing](./addressing.md)
