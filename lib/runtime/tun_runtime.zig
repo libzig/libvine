@@ -71,6 +71,11 @@ pub const TunRuntime = struct {
     }
 
     pub fn receivePacketFromSession(self: *TunRuntime, peer_id: core.types.PeerId, packet: []const u8) bool {
+        if (!self.isAuthorizedPeer(peer_id)) {
+            self.last_drop = .unauthorized_peer;
+            return false;
+        }
+        self.last_drop = null;
         return self.node.receivePacket(peer_id, packet);
     }
 
@@ -84,6 +89,13 @@ pub const TunRuntime = struct {
             return null;
         };
         return session;
+    }
+
+    fn isAuthorizedPeer(self: TunRuntime, peer_id: core.types.PeerId) bool {
+        for (self.node.config.allowlist) |allowed| {
+            if (allowed.eql(peer_id)) return true;
+        }
+        return false;
     }
 };
 
@@ -311,6 +323,7 @@ test "tun runtime receives packets from sessions and injects them into tun" {
             .prefix_len = 24,
             .mtu = 1400,
         },
+        .allowlist = &.{peer},
     }, .{
         .routes = &routes,
         .sessions = &sessions,
@@ -361,4 +374,47 @@ test "tun runtime drops packets for unknown routes" {
 
     try std.testing.expect(runtime.dispatchPacket(&packet) == null);
     try std.testing.expectEqual(TunRuntime.DropReason.unknown_route, runtime.last_drop.?);
+}
+
+test "tun runtime drops packets from unauthorized peers" {
+    const std = @import("std");
+
+    const allowed = core.types.PeerId.init(.{0x66} ** core.types.peer_id_len);
+    const unauthorized = core.types.PeerId.init(.{0x67} ** core.types.peer_id_len);
+    var routes = [_]core.route_table.RouteEntry{};
+    var sessions = [_]core.session_table.ActiveSession{
+        .{
+            .peer_id = unauthorized,
+            .session_id = .{ .value = 71 },
+            .preference = .direct,
+        },
+    };
+    var memberships = [_]core.membership.PeerMembership{};
+    var installed = [_]linux.routes.InstalledRoute{};
+
+    var node = try api.node.Node.init(.{
+        .network_id = try core.types.NetworkId.init("home-net"),
+        .tun = .{
+            .ifname = [_]u8{ 'v', 'i', 'n', 'e', '7', 0 } ++ ([_]u8{0} ** 10),
+            .local_address = try core.types.VineAddress.parse("10.42.0.1"),
+            .prefix_len = 24,
+            .mtu = 1400,
+        },
+        .allowlist = &.{allowed},
+    }, .{
+        .routes = &routes,
+        .sessions = &sessions,
+        .memberships = &memberships,
+    });
+    var runtime = TunRuntime.init(&node, &installed);
+    const packet = [_]u8{
+        0x45, 0x00, 0x00, 0x14,
+        0x00, 0x00, 0x00, 0x00,
+        0x40, 0x00, 0x00, 0x00,
+        10, 42, 1, 7,
+        10, 42, 0, 1,
+    } ++ ([_]u8{0} ** 4);
+
+    try std.testing.expect(!runtime.receivePacketFromSession(unauthorized, &packet));
+    try std.testing.expectEqual(TunRuntime.DropReason.unauthorized_peer, runtime.last_drop.?);
 }
