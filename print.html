@@ -1,0 +1,938 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title></title>
+        <meta name="robots" content="noindex">
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="favicon-8114d1fc.png">
+        <link rel="stylesheet" href="css/variables-8adf115d.css">
+        <link rel="stylesheet" href="css/general-2459343d.css">
+        <link rel="stylesheet" href="css/chrome-ae938929.css">
+        <link rel="stylesheet" href="css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "searchindex-892f23c3.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc-59b58f2b.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title"></h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="libvine"><a class="header" href="#libvine">libvine</a></h1>
+<p><code>libvine</code> is a Zig virtual network library for building small authenticated IPv4 overlays on top of the existing <code>libzig</code> stack.</p>
+<p>For the MVP, <code>libvine</code> is intentionally narrow:</p>
+<ul>
+<li>Linux only</li>
+<li>IPv4 L3 overlay semantics</li>
+<li>one overlay network per process</li>
+<li>small peer sets</li>
+<li>static or bootstrap-assisted membership</li>
+</ul>
+<p><code>libvine</code> is not a replacement control plane. It uses <code>libmesh</code> extensively for discovery, signaling, route selection, session setup, and relay fallback. <code>libvine</code> owns overlay membership policy, virtual addressing, packet forwarding, and Linux TUN integration.</p>
+<h2 id="stack-position"><a class="header" href="#stack-position">Stack Position</a></h2>
+<ul>
+<li><code>libself</code>: identity and authenticated peer metadata</li>
+<li><code>libmesh</code>: discovery, signaling, path selection, and relay fallback</li>
+<li><code>libdice</code>: NAT traversal assistance when direct paths need setup exchange</li>
+<li><code>libfast</code>: encrypted transport for control and packet carriage</li>
+<li><code>libvine</code>: overlay network semantics and Linux host integration</li>
+</ul>
+<h2 id="mvp-direction"><a class="header" href="#mvp-direction">MVP Direction</a></h2>
+<p>The first milestone is a coherent library skeleton with stable public boundaries, tests that compile, and enough documentation for downstream consumers to follow the intended architecture before deeper control-plane and data-plane work lands.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="cli"><a class="header" href="#cli">CLI</a></h1>
+<p><code>vine</code> is the operator-facing binary for running <code>libvine</code> as a real VPN process on Linux hosts.</p>
+<h2 id="top-level-commands"><a class="header" href="#top-level-commands">Top-Level Commands</a></h2>
+<ul>
+<li><code>vine help</code></li>
+<li><code>vine version</code></li>
+<li><code>vine identity</code></li>
+<li><code>vine config</code></li>
+<li><code>vine daemon</code></li>
+<li><code>vine status</code></li>
+<li><code>vine diagnostics</code></li>
+</ul>
+<h2 id="command-intent"><a class="header" href="#command-intent">Command Intent</a></h2>
+<ul>
+<li><code>identity</code> manages persistent <code>libself</code>-backed node identity</li>
+<li><code>config</code> manages validation and initialization of the node config file</li>
+<li><code>daemon</code> controls long-running runtime lifecycle</li>
+<li><code>status</code> reports current node and network state</li>
+<li><code>diagnostics</code> exposes counters, snapshots, and debug output</li>
+</ul>
+<h2 id="current-state"><a class="header" href="#current-state">Current State</a></h2>
+<p>The binary surface is being built incrementally. The first milestone is to freeze the operator contract
+before deeper identity, config, and daemon behavior is implemented.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="identity"><a class="header" href="#identity">Identity</a></h1>
+<p><code>libvine</code> node identity comes from <code>libself</code>, not from overlay IP addresses.</p>
+<h2 id="separation-of-concerns"><a class="header" href="#separation-of-concerns">Separation Of Concerns</a></h2>
+<ul>
+<li><code>libself</code> identity answers who the node is</li>
+<li><code>NetworkId</code> answers which overlay the node is joining</li>
+<li><code>VinePrefix</code> answers which virtual IP range the node advertises</li>
+<li><code>libmesh</code> answers which path should carry traffic right now</li>
+</ul>
+<h2 id="persistent-identity"><a class="header" href="#persistent-identity">Persistent Identity</a></h2>
+<p>The <code>vine</code> binary stores node identity on disk so the same node can restart without
+appearing as a new peer.</p>
+<p>Current default path:</p>
+<ul>
+<li><code>/var/lib/libvine/identity</code></li>
+</ul>
+<p>The persisted identity file is a text format with a stable header and derived public fields:</p>
+<ul>
+<li><code>format</code></li>
+<li><code>seed</code></li>
+<li><code>public_key</code></li>
+<li><code>peer_id</code></li>
+<li><code>fingerprint</code></li>
+</ul>
+<h2 id="cli-commands"><a class="header" href="#cli-commands">CLI Commands</a></h2>
+<ul>
+<li><code>vine identity init</code></li>
+<li><code>vine identity show</code></li>
+<li><code>vine identity export-public</code></li>
+<li><code>vine identity fingerprint</code></li>
+</ul>
+<h2 id="enrollment-use"><a class="header" href="#enrollment-use">Enrollment Use</a></h2>
+<p><code>export-public</code> is intended for enrollment and allowlist workflows. It exposes public identity material
+that another node or operator can use when binding a peer identity to an overlay prefix.</p>
+<p>The important rule is that the peer is trusted as a <code>libself</code> identity first, and only then
+associated with overlay addressing policy.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="configuration"><a class="header" href="#configuration">Configuration</a></h1>
+<p><code>vine</code> reads operator configuration from a TOML file, by default:</p>
+<ul>
+<li><code>/etc/libvine/vine.toml</code></li>
+</ul>
+<p>The file defines overlay membership, local TUN settings, bootstrap peers, allowlisted peer prefixes,
+and runtime policy toggles. Identity is configured by path, but identity itself is still derived from
+<code>libself</code> material on disk rather than from overlay IP addresses.</p>
+<h2 id="example"><a class="header" href="#example">Example</a></h2>
+<pre><code class="language-toml">[node]
+name = "alpha"
+network_id = "home-net"
+identity_path = "/var/lib/libvine/identity"
+
+[tun]
+name = "vine0"
+address = "10.42.0.1"
+prefix_len = 24
+mtu = 1400
+
+[[bootstrap_peers]]
+peer_id = "seed-a"
+address = "udp://198.51.100.10:4100"
+
+[[allowed_peers]]
+peer_id = "beta"
+prefix = "10.42.1.0/24"
+relay_capable = false
+
+[[allowed_peers]]
+peer_id = "relay-a"
+prefix = "10.42.254.0/24"
+relay_capable = true
+
+[policy]
+strict_allowlist = true
+allow_relay = true
+allow_signaling_upgrade = true
+</code></pre>
+<h2 id="sections"><a class="header" href="#sections">Sections</a></h2>
+<p><code>[node]</code></p>
+<ul>
+<li><code>name</code>: operator-facing node label</li>
+<li><code>network_id</code>: shared overlay network identifier</li>
+<li><code>identity_path</code>: absolute path to the persisted <code>libself</code> identity file</li>
+</ul>
+<p><code>[tun]</code></p>
+<ul>
+<li><code>name</code>: Linux TUN interface name</li>
+<li><code>address</code>: local overlay IPv4 address</li>
+<li><code>prefix_len</code>: local prefix length</li>
+<li><code>mtu</code>: interface MTU</li>
+</ul>
+<p><code>[[bootstrap_peers]]</code></p>
+<ul>
+<li><code>peer_id</code>: remote authenticated peer identifier</li>
+<li><code>address</code>: bootstrap transport address</li>
+</ul>
+<p><code>[[allowed_peers]]</code></p>
+<ul>
+<li><code>peer_id</code>: remote authenticated peer identifier</li>
+<li><code>prefix</code>: overlay prefix owned by that peer</li>
+<li><code>relay_capable</code>: whether the peer may act as a relay fallback</li>
+</ul>
+<p><code>[policy]</code></p>
+<ul>
+<li><code>strict_allowlist</code>: require explicit peer allowlisting</li>
+<li><code>allow_relay</code>: permit relay fallback</li>
+<li><code>allow_signaling_upgrade</code>: permit direct-path upgrade after signaling</li>
+</ul>
+<h2 id="validation"><a class="header" href="#validation">Validation</a></h2>
+<p>Use:</p>
+<pre><code class="language-text">vine config validate -c /etc/libvine/vine.toml
+</code></pre>
+<p>Validation currently checks:</p>
+<ul>
+<li>TOML-shaped section and key parsing</li>
+<li>repeated <code>bootstrap_peers</code> and <code>allowed_peers</code> records</li>
+<li>boolean and integer field decoding</li>
+<li>config path must be absolute and not group/world writable</li>
+<li>identity path must be absolute and point to a <code>0600</code> file</li>
+</ul>
+<p>Malformed config should be rejected before daemon startup rather than at packet-forwarding time.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="daemon"><a class="header" href="#daemon">Daemon</a></h1>
+<p><code>vine</code> now has a dedicated daemon lifecycle surface:</p>
+<ul>
+<li><code>vine daemon run</code></li>
+<li><code>vine daemon start</code></li>
+<li><code>vine daemon stop</code></li>
+<li><code>vine daemon status</code></li>
+</ul>
+<p>The current implementation is still a lightweight skeleton, but it already establishes the runtime
+ownership model that later slices will connect to real node startup and multi-peer operation.</p>
+<h2 id="runtime-ownership"><a class="header" href="#runtime-ownership">Runtime Ownership</a></h2>
+<p>The daemon runtime owns:</p>
+<ul>
+<li>phase transitions: <code>stopped</code>, <code>starting</code>, <code>running</code>, <code>stopping</code></li>
+<li>the configured config path for the active process</li>
+<li>pidfile and runtime state paths</li>
+<li>bounded startup sequencing</li>
+<li>bounded shutdown sequencing</li>
+<li>signal conventions for shutdown, reload, and diagnostics</li>
+</ul>
+<p>Those behaviors live in <code>lib/daemon/runtime.zig</code>.</p>
+<h2 id="foreground-and-background"><a class="header" href="#foreground-and-background">Foreground And Background</a></h2>
+<p><code>vine daemon run -c /etc/libvine/vine.toml</code></p>
+<ul>
+<li>runs in the foreground</li>
+<li>enters the bounded startup sequence</li>
+<li>transitions to <code>running</code></li>
+</ul>
+<p><code>vine daemon start -c /etc/libvine/vine.toml</code></p>
+<ul>
+<li>spawns the current <code>vine</code> executable in background daemon mode</li>
+<li>writes a pidfile</li>
+<li>leaves runtime state for <code>status</code> to inspect</li>
+</ul>
+<h2 id="stop-and-status"><a class="header" href="#stop-and-status">Stop And Status</a></h2>
+<p><code>vine daemon stop</code></p>
+<ul>
+<li>reads the pidfile</li>
+<li>sends <code>SIGTERM</code></li>
+<li>runs the bounded shutdown sequence</li>
+<li>removes the pidfile</li>
+</ul>
+<p><code>vine daemon status</code></p>
+<ul>
+<li>reads the runtime state file when present</li>
+<li>reports the daemon phase</li>
+<li>reports the pid from pidfile or stored state</li>
+</ul>
+<h2 id="signals"><a class="header" href="#signals">Signals</a></h2>
+<p>Current signal conventions are explicit:</p>
+<ul>
+<li>clean shutdown: <code>SIGTERM</code></li>
+<li>reload request: <code>SIGHUP</code></li>
+<li>diagnostics dump request: <code>SIGUSR1</code></li>
+</ul>
+<p>This keeps the control contract stable before the runtime is fully connected to live TUN and session ownership.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="runtime"><a class="header" href="#runtime">Runtime</a></h1>
+<p>Step 5 turns static config and persisted identity into a real startup model.</p>
+<p>The key rule stays the same:</p>
+<ul>
+<li><code>libself</code> identity determines who the node is</li>
+<li>config determines which overlay prefix the node advertises</li>
+</ul>
+<p>Those are related at startup, but they are not the same thing.</p>
+<h2 id="runtime-translation"><a class="header" href="#runtime-translation">Runtime Translation</a></h2>
+<p><code>lib/runtime/runtime_config.zig</code> now translates:</p>
+<ul>
+<li><code>vine.toml</code></li>
+<li>the persisted identity file</li>
+</ul>
+<p>into runtime-facing state:</p>
+<ul>
+<li><code>NodeConfig</code></li>
+<li>local <code>PeerId</code></li>
+<li>local <code>LocalMembership</code></li>
+<li>allowlist-driven admission policy</li>
+<li>bootstrap peer startup state</li>
+<li>relay-capable peer declarations</li>
+</ul>
+<h2 id="startup-inputs"><a class="header" href="#startup-inputs">Startup Inputs</a></h2>
+<p>The runtime loader consumes:</p>
+<ul>
+<li><code>[node]</code></li>
+<li><code>[tun]</code></li>
+<li><code>[[bootstrap_peers]]</code></li>
+<li><code>[[allowed_peers]]</code></li>
+<li><code>[policy]</code></li>
+</ul>
+<p>and the identity file referenced by <code>node.identity_path</code>.</p>
+<p>The resulting startup state is then suitable for:</p>
+<ul>
+<li><code>Node.init</code></li>
+<li><code>Node.start</code></li>
+<li>foreground bring-up through <code>vine up</code></li>
+</ul>
+<h2 id="operator-commands"><a class="header" href="#operator-commands">Operator Commands</a></h2>
+<p><code>vine up -c /etc/libvine/vine.toml</code></p>
+<ul>
+<li>loads config</li>
+<li>loads persisted identity</li>
+<li>derives the local peer identity from <code>libself</code></li>
+<li>binds the configured local prefix into local membership</li>
+<li>starts the node in foreground mode</li>
+</ul>
+<p><code>vine down</code></p>
+<ul>
+<li>reads the daemon pidfile when present</li>
+<li>sends a shutdown request</li>
+<li>removes the pidfile for controlled local stop</li>
+</ul>
+<h2 id="identity-versus-prefix"><a class="header" href="#identity-versus-prefix">Identity Versus Prefix</a></h2>
+<p>The same identity can be restarted with a different configured overlay prefix.
+That should change the local membership prefix, but not the authenticated <code>PeerId</code>.</p>
+<p>The runtime tests now lock that behavior in:</p>
+<ul>
+<li>identity is stable across reloads</li>
+<li>configured prefix is translated from config</li>
+<li>changing config address does not change peer identity</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="enrollment"><a class="header" href="#enrollment">Enrollment</a></h1>
+<p>Enrollment in <code>libvine</code> is now explicit and deterministic.</p>
+<p>The daemon no longer treats a discovered peer as automatically valid just because it exists on the network.
+A remote membership update must satisfy all of the following:</p>
+<ul>
+<li>the peer is on the allowlist by <code>PeerId</code></li>
+<li>the update targets the same configured <code>NetworkId</code></li>
+<li>the peer is claiming the exact overlay prefix it was configured to own</li>
+</ul>
+<h2 id="phase-one-ownership-model"><a class="header" href="#phase-one-ownership-model">Phase-One Ownership Model</a></h2>
+<p>For phase one, each allowed peer owns one configured prefix.</p>
+<p>That mapping comes from the node config and is translated into runtime enrollment state. The result is:</p>
+<ul>
+<li>one authenticated <code>PeerId</code></li>
+<li>one owned <code>VinePrefix</code></li>
+<li>optional relay-capable flag</li>
+</ul>
+<p>This keeps ownership simple enough for real multi-PC bring-up without introducing distributed routing policy.</p>
+<h2 id="accepted-membership-flow"><a class="header" href="#accepted-membership-flow">Accepted Membership Flow</a></h2>
+<p>When a membership update is accepted:</p>
+<ol>
+<li>remote membership state is refreshed</li>
+<li>route-table state is updated for the accepted prefix</li>
+<li>topology callbacks can observe the change</li>
+</ol>
+<p>When a membership update is rejected:</p>
+<ul>
+<li>remote membership state is unchanged</li>
+<li>route-table state is unchanged</li>
+</ul>
+<h2 id="rejection-cases"><a class="header" href="#rejection-cases">Rejection Cases</a></h2>
+<p>Current rejection rules include:</p>
+<ul>
+<li>peer not present in the configured allowlist</li>
+<li>wrong overlay network ID</li>
+<li>claimed prefix does not match configured ownership</li>
+<li>overlapping configured peer prefixes at startup</li>
+</ul>
+<h2 id="shutdown"><a class="header" href="#shutdown">Shutdown</a></h2>
+<p>Withdrawal follows the inverse path:</p>
+<ul>
+<li>remote membership is marked expired</li>
+<li>the matching route is withdrawn</li>
+<li>topology observers receive the change</li>
+</ul>
+<p>This keeps local routing state aligned with membership state during daemon shutdown and peer departure.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="peers-and-sessions"><a class="header" href="#peers-and-sessions">Peers and Sessions</a></h1>
+<p><code>libvine</code> keeps identity, overlay addressing, and transport reachability separate:</p>
+<ul>
+<li><code>PeerId</code> comes from <code>libself</code></li>
+<li><code>VinePrefix</code> says which overlay range a peer owns</li>
+<li>the session manager decides which transport path is currently best</li>
+</ul>
+<p>Configured peers are loaded from <code>vine.toml</code> and translated into runtime session candidates.
+At runtime, <code>libmesh</code> reachability is mapped into three session classes:</p>
+<ul>
+<li><code>direct</code></li>
+<li><code>signaling_then_direct</code></li>
+<li><code>relay</code></li>
+</ul>
+<p>The runtime preference order is fixed:</p>
+<ol>
+<li><code>direct</code></li>
+<li><code>signaling_then_direct</code></li>
+<li><code>relay</code></li>
+</ol>
+<p>Relay sessions are only accepted for peers explicitly marked <code>relay_capable = true</code>.
+This prevents the runtime from silently treating every peer as a relay target.</p>
+<p>When a better path appears, the session manager promotes it. When a preferred path dies,
+the manager can fall back to an existing relay session without changing peer identity or
+prefix ownership.</p>
+<p>Use the CLI to inspect the current session snapshot:</p>
+<pre><code class="language-text">vine sessions -c /etc/libvine/vine.toml
+</code></pre>
+<p>The command reports:</p>
+<ul>
+<li>configured peer count</li>
+<li>session counts by class</li>
+<li>preferred session per peer</li>
+<li>whether the peer is relay-capable</li>
+</ul>
+<p>At this stage the command is config-driven and renders the runtime session-manager view
+for configured peers. The later diagnostics slices will extend this into a fuller
+daemon-backed runtime snapshot.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="packet-flow"><a class="header" href="#packet-flow">Packet Flow</a></h1>
+<p>Step 8 turns the runtime into a real packet path instead of just a session and membership model.</p>
+<p>The flow is:</p>
+<ol>
+<li>read an IP packet from the TUN device</li>
+<li>inspect the overlay destination address</li>
+<li>match the destination against the route table</li>
+<li>choose the preferred session for the route’s peer</li>
+<li>send the packet over that session</li>
+<li>receive packets from authorized peers</li>
+<li>inject inbound packets back into the local TUN device</li>
+</ol>
+<p><code>TunRuntime</code> owns the bridge between:</p>
+<ul>
+<li><code>Node</code></li>
+<li>the Linux-facing TUN handle</li>
+<li>installed Linux route state</li>
+<li>packet drop reasons</li>
+</ul>
+<p>The runtime keeps explicit drop behavior:</p>
+<ul>
+<li>unknown overlay destinations are dropped as <code>unknown_route</code></li>
+<li>unauthorized peers are dropped as <code>unauthorized_peer</code></li>
+<li>missing session state is dropped as <code>no_session</code></li>
+</ul>
+<p>Route cleanup stays explicit too:</p>
+<ul>
+<li>withdrawing membership detaches the installed route</li>
+<li>stale direct sessions downgrade to relay when relay fallback exists</li>
+<li>stale sessions without fallback tombstone the route</li>
+</ul>
+<p>The fake transport tests exercise end-to-end packet movement between nodes without needing
+real sockets. That gives us coverage for:</p>
+<ul>
+<li>outbound route lookup</li>
+<li>preferred-session dispatch</li>
+<li>inbound TUN injection</li>
+<li>route teardown and downgrade behavior</li>
+</ul>
+<p>This is the point where the daemon starts resembling a real overlay dataplane instead of
+just a configuration and identity shell.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="operations"><a class="header" href="#operations">Operations</a></h1>
+<p>The <code>vine</code> binary is intended to support both development-time foreground use and long-running daemon use.</p>
+<h2 id="foreground-workflow"><a class="header" href="#foreground-workflow">Foreground Workflow</a></h2>
+<p>Foreground mode is for:</p>
+<ul>
+<li>initial configuration bring-up</li>
+<li>debugging TUN and routing behavior</li>
+<li>watching logs and counters interactively</li>
+</ul>
+<p>The expected foreground flow is:</p>
+<ol>
+<li>validate config</li>
+<li>load identity</li>
+<li>start the node runtime</li>
+<li>observe peers, routes, sessions, and counters</li>
+<li>stop cleanly with a signal or explicit command</li>
+</ol>
+<h2 id="daemon-workflow"><a class="header" href="#daemon-workflow">Daemon Workflow</a></h2>
+<p>Daemon mode is for:</p>
+<ul>
+<li>multi-PC deployments</li>
+<li>persistent background VPN service</li>
+<li>boot-time or service-manager startup</li>
+</ul>
+<p>The expected daemon flow is:</p>
+<ol>
+<li>start with a config file</li>
+<li>record pidfile and state paths</li>
+<li>own TUN lifecycle and session lifecycle</li>
+<li>expose status and diagnostics through CLI subcommands</li>
+<li>stop cleanly without leaking routes or stale runtime state</li>
+</ol>
+<h2 id="operational-priorities"><a class="header" href="#operational-priorities">Operational Priorities</a></h2>
+<ul>
+<li>identity must load before overlay membership is advertised</li>
+<li>route ownership must remain tied to authenticated peers</li>
+<li>direct sessions should be preferred over relay when both are available</li>
+<li>relay fallback should be observable rather than silent</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="architecture"><a class="header" href="#architecture">Architecture</a></h1>
+<p><code>libvine</code> sits at the overlay edge of the <code>libzig</code> networking stack.</p>
+<h2 id="responsibility-split"><a class="header" href="#responsibility-split">Responsibility Split</a></h2>
+<ul>
+<li><code>libself</code> owns node identity and authenticated peer metadata.</li>
+<li><code>libmesh</code> owns discovery, signaling, path selection, and relay fallback.</li>
+<li><code>libdice</code> helps with traversal setup when direct connectivity needs coordination.</li>
+<li><code>libfast</code> carries encrypted control and packet traffic once a path is open.</li>
+<li><code>libvine</code> owns overlay membership policy, virtual IPv4 addressing, forwarding, and Linux TUN integration.</li>
+</ul>
+<h2 id="architectural-rule"><a class="header" href="#architectural-rule">Architectural Rule</a></h2>
+<p>If <code>libmesh</code> already owns a reachability concern, <code>libvine</code> reuses it instead of rebuilding it. <code>libvine</code> should consume <code>libmesh</code> decisions and expose overlay semantics on top of them rather than inventing a second control plane.</p>
+<h2 id="mvp-shape"><a class="header" href="#mvp-shape">MVP Shape</a></h2>
+<p>The MVP is Linux-only, IPv4-only, and intentionally optimized for small peer sets. One process hosts one overlay network instance, and the first policy model is expected to be explicit and static enough to keep routing and membership deterministic.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="mvp"><a class="header" href="#mvp">MVP</a></h1>
+<h2 id="supported"><a class="header" href="#supported">Supported</a></h2>
+<ul>
+<li>Linux-only runtime</li>
+<li>IPv4 L3 overlay traffic</li>
+<li>one overlay network per process</li>
+<li>small peer sets</li>
+<li>static or bootstrap-assisted membership</li>
+<li><code>libmesh</code>-driven direct-first and relay-fallback connectivity</li>
+<li>Linux TUN-backed packet ingress and egress</li>
+</ul>
+<h2 id="explicitly-out-of-scope"><a class="header" href="#explicitly-out-of-scope">Explicitly Out Of Scope</a></h2>
+<ul>
+<li>multi-platform support</li>
+<li>IPv6 overlay forwarding</li>
+<li>dynamic distributed routing protocols</li>
+<li>kernel modules</li>
+<li>multi-tenant controllers</li>
+<li>production-grade PKI</li>
+<li>aggressive performance work beyond basic correctness</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="addressing"><a class="header" href="#addressing">Addressing</a></h1>
+<p>The MVP uses an IPv4-only overlay model.</p>
+<h2 id="overlay-semantics"><a class="header" href="#overlay-semantics">Overlay Semantics</a></h2>
+<ul>
+<li>each node belongs to one named overlay network</li>
+<li>each node owns one primary IPv4 prefix for the MVP</li>
+<li>packet forwarding is based on prefix ownership, not dynamic distributed routing</li>
+<li>route selection prefers the best reachable session provided by <code>libmesh</code></li>
+</ul>
+<h2 id="initial-constraints"><a class="header" href="#initial-constraints">Initial Constraints</a></h2>
+<ul>
+<li>no IPv6 data plane in the MVP</li>
+<li>no multi-prefix complexity unless later slices explicitly add it</li>
+<li>no overlapping prefix acceptance without a deterministic conflict policy</li>
+</ul>
+<p>The addressing model stays intentionally small so control-plane compatibility and forwarding behavior can stabilize before broader routing features are attempted.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="control-plane"><a class="header" href="#control-plane">Control Plane</a></h1>
+<p><code>libvine</code> does not build an independent reachability control plane for the MVP.</p>
+<h2 id="what-libmesh-owns"><a class="header" href="#what-libmesh-owns">What <code>libmesh</code> Owns</a></h2>
+<ul>
+<li>peer discovery</li>
+<li>signaling exchange</li>
+<li>path selection</li>
+<li>relay fallback decisions</li>
+<li>session orchestration hooks</li>
+</ul>
+<h2 id="what-libvine-adds"><a class="header" href="#what-libvine-adds">What <code>libvine</code> Adds</a></h2>
+<ul>
+<li>overlay network identity checks</li>
+<li>virtual prefix advertisement semantics</li>
+<li>membership policy</li>
+<li>route ownership updates specific to overlay forwarding</li>
+</ul>
+<p><code>libvine</code> control messages should be small, versioned, and designed to travel through <code>libmesh</code> signaling and setup flows rather than bypassing them.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="data-plane"><a class="header" href="#data-plane">Data Plane</a></h1>
+<p>The MVP data plane carries raw IPv4 packets between Linux TUN interfaces over sessions established through the lower stack.</p>
+<h2 id="packet-flow-1"><a class="header" href="#packet-flow-1">Packet Flow</a></h2>
+<ol>
+<li>a local packet arrives from the TUN device</li>
+<li><code>libvine</code> maps the destination address to an owned overlay prefix</li>
+<li><code>libvine</code> selects the preferred reachable peer session</li>
+<li>the packet is framed and sent over the active transport path</li>
+<li>the remote node decapsulates the payload and injects it into its TUN device</li>
+</ol>
+<h2 id="scope"><a class="header" href="#scope">Scope</a></h2>
+<ul>
+<li>raw IPv4 payload carriage only for the MVP</li>
+<li>explicit framing for control messages versus packet data</li>
+<li>bounded payload sizes derived from transport and relay constraints</li>
+<li>no hidden control-plane reinvention in the packet path</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="linux"><a class="header" href="#linux">Linux</a></h1>
+<p>The MVP assumes a Linux host with access to <code>/dev/net/tun</code> and sufficient privileges to create and configure a TUN interface.</p>
+<h2 id="expectations"><a class="header" href="#expectations">Expectations</a></h2>
+<ul>
+<li><code>libvine</code> opens and manages a TUN device in userspace</li>
+<li>the host must allow interface creation and address assignment</li>
+<li>local route installation is expected for remote overlay prefixes</li>
+<li>one process owns one overlay instance and its associated TUN interface</li>
+</ul>
+<h2 id="operational-notes"><a class="header" href="#operational-notes">Operational Notes</a></h2>
+<ul>
+<li>interface and route management should stay narrow and explicit</li>
+<li>shell fallbacks, if used at all, should be tightly scoped and easy to audit</li>
+<li>privilege requirements and failure modes should be surfaced clearly to callers and operators</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="libvine-integration-contract"><a class="header" href="#libvine-integration-contract">libvine Integration Contract</a></h1>
+<h2 id="audience"><a class="header" href="#audience">Audience</a></h2>
+<p>This document is for downstream consumers such as <code>libboid</code> that want to embed <code>libvine</code>
+as an overlay runtime instead of talking to <code>libmesh</code>, <code>libfast</code>, and Linux TUN details directly.</p>
+<h2 id="public-entry-points"><a class="header" href="#public-entry-points">Public Entry Points</a></h2>
+<ul>
+<li>import <code>libvine</code> from the package root</li>
+<li>configure a node with <code>lib/api/config.zig</code></li>
+<li>create and run a node with <code>lib/api/node.zig</code></li>
+<li>use examples in <code>examples/</code> as the baseline integration shape</li>
+</ul>
+<p>The most complete topology walkthrough in the repo is <code>examples/multi_node_relay_demo.zig</code>,
+which models multiple peers plus a relay and shows direct, signaling-assisted, and relay fallback traffic choices.</p>
+<h2 id="required-consumer-inputs"><a class="header" href="#required-consumer-inputs">Required Consumer Inputs</a></h2>
+<p>A consumer is expected to provide:</p>
+<ul>
+<li>one <code>NetworkId</code> shared by all peers in the overlay</li>
+<li>one local TUN address and prefix length</li>
+<li>an allowlist of accepted peers when strict admission is desired</li>
+<li>either static bootstrap peers or published seed records</li>
+<li>an identity source, generated or deterministic seed-backed</li>
+</ul>
+<h2 id="runtime-contract"><a class="header" href="#runtime-contract">Runtime Contract</a></h2>
+<p><code>Node.init</code> wires together local identity, membership state, TUN state, route state, session state,
+and the <code>libmesh</code> adapter boundary. Consumers should treat the node as the sole owner of those runtime slices
+for the lifetime of the process.</p>
+<p><code>Node.start</code> marks the node active and advertises local membership.</p>
+<p><code>Node.bootstrap</code> chooses discovery inputs in this order:</p>
+<ol>
+<li>static bootstrap peers</li>
+<li>seed records</li>
+</ol>
+<p><code>Node.sendPacket</code>, <code>Node.receivePacket</code>, and <code>Node.cleanupStaleSession</code> expose the data-plane and
+fallback-sensitive runtime hooks used by the current tests and examples.</p>
+<h2 id="diagnostics-and-debugging"><a class="header" href="#diagnostics-and-debugging">Diagnostics And Debugging</a></h2>
+<p>Consumers can attach an event callback for:</p>
+<ul>
+<li>lifecycle logs</li>
+<li>bootstrap diagnostics</li>
+<li>topology changes</li>
+</ul>
+<p>Consumers can also read:</p>
+<ul>
+<li><code>node.diagnostics</code> for counters</li>
+<li><code>node.debugSnapshot()</code> for structured runtime inspection</li>
+</ul>
+<h2 id="integration-rules-for-libboid"><a class="header" href="#integration-rules-for-libboid">Integration Rules For libboid</a></h2>
+<p><code>libboid</code> should:</p>
+<ul>
+<li>construct <code>NodeConfig</code> once per overlay process</li>
+<li>keep peer identity and allowlist policy outside <code>libvine</code>, then feed approved peers in</li>
+<li>treat <code>libmesh</code> reachability as authoritative instead of second-guessing it in application code</li>
+<li>use the event callback and debug snapshot APIs for observability</li>
+<li>prefer the example programs as the starting point for host-side orchestration</li>
+</ul>
+<p><code>libboid</code> should not:</p>
+<ul>
+<li>bypass <code>Node</code> and mutate route/session slices concurrently while the runtime is active</li>
+<li>invent its own overlay packet framing on top of live <code>libvine</code> sessions</li>
+<li>assume relay fallback is equivalent to direct-path latency or throughput</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="libvine-testing-guide"><a class="header" href="#libvine-testing-guide">libvine Testing Guide</a></h1>
+<h2 id="core-commands"><a class="header" href="#core-commands">Core Commands</a></h2>
+<ul>
+<li><code>make build</code></li>
+<li><code>make test</code></li>
+<li><code>zig build examples</code></li>
+</ul>
+<p>The development loop used for the MVP slices is:</p>
+<ol>
+<li>apply one small change</li>
+<li>run <code>make build</code></li>
+<li>run <code>make test</code></li>
+<li>commit only after both pass</li>
+</ol>
+<h2 id="what-is-covered"><a class="header" href="#what-is-covered">What Is Covered</a></h2>
+<p>The current test suite covers:</p>
+<ul>
+<li>core type parsing and validation</li>
+<li>route-table precedence, stale update rejection, withdrawals, and stress cases</li>
+<li>session promotion, churn, and relay fallback behavior</li>
+<li>control/data codec parsing, including mutation-style malformed input tests</li>
+<li>session send/receive framing</li>
+<li>fake Linux TUN lifecycle behavior</li>
+<li>node lifecycle, bootstrap, membership refresh, event callbacks, diagnostics, and debug snapshots</li>
+<li>direct, signaling-assisted, and relay-backed integration-style flows</li>
+</ul>
+<h2 id="what-is-not-covered"><a class="header" href="#what-is-not-covered">What Is Not Covered</a></h2>
+<p>The MVP tests do not currently provide:</p>
+<ul>
+<li>real multi-process Linux network namespace coverage</li>
+<li>live <code>libmesh</code> network interoperability beyond the adapter-level contract</li>
+<li>throughput or latency benchmarking</li>
+<li>privileged end-to-end route programming on a real host</li>
+</ul>
+<h2 id="recommended-downstream-practice"><a class="header" href="#recommended-downstream-practice">Recommended Downstream Practice</a></h2>
+<p>Downstream consumers should:</p>
+<ul>
+<li>reuse <code>lib/testing/fixtures.zig</code> for shared test setup</li>
+<li>keep integration tests deterministic and in-memory where possible</li>
+<li>add host-specific tests outside <code>libvine</code> when validating deployment environments</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="libvine-troubleshooting"><a class="header" href="#libvine-troubleshooting">libvine Troubleshooting</a></h1>
+<h2 id="build-fails"><a class="header" href="#build-fails">Build Fails</a></h2>
+<p>If <code>make build</code> fails:</p>
+<ul>
+<li>confirm the Nix shell is active and Zig <code>0.15.2</code> is the toolchain in use</li>
+<li>check that local path dependencies <code>libself</code>, <code>libmesh</code>, <code>libdice</code>, and <code>libfast</code> are present</li>
+<li>remember that example programs are compiled as part of the build</li>
+</ul>
+<h2 id="test-fails"><a class="header" href="#test-fails">Test Fails</a></h2>
+<p>If <code>make test</code> fails:</p>
+<ul>
+<li>start with the failing module instead of chasing the full stack</li>
+<li>check whether a new test exposed a stale assumption in route/session fallback behavior</li>
+<li>confirm changes under <code>lib/data/</code> were force-added if Git ignore rules apply there</li>
+</ul>
+<h2 id="runtime-issues"><a class="header" href="#runtime-issues">Runtime Issues</a></h2>
+<p>Common runtime expectations:</p>
+<ul>
+<li>unknown routes should be dropped, not guessed</li>
+<li>unauthorized source peers should not inject packets into the TUN path</li>
+<li>relay fallback should preserve connectivity but not match direct-path performance</li>
+<li>stale session cleanup may detach routes if no relay fallback remains</li>
+</ul>
+<h2 id="linux-limitations"><a class="header" href="#linux-limitations">Linux Limitations</a></h2>
+<p>This MVP assumes:</p>
+<ul>
+<li>Linux only</li>
+<li>TUN-backed IPv4 L3 overlay behavior</li>
+<li>userspace-controlled route programming</li>
+</ul>
+<p>Real host deployment may still require:</p>
+<ul>
+<li>elevated privileges for TUN setup</li>
+<li>explicit local route installation</li>
+<li>environment-specific firewall and namespace adjustments</li>
+</ul>
+<h2 id="debugging-tools"><a class="header" href="#debugging-tools">Debugging Tools</a></h2>
+<p>Use:</p>
+<ul>
+<li>node event callbacks for lifecycle and topology signals</li>
+<li>node diagnostics counters for traffic and failure trends</li>
+<li><code>debugSnapshot()</code> for structured inspection of sessions and advertised prefixes</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr-ef4e11c1.min.js"></script>
+        <script src="mark-09e88c2c.min.js"></script>
+        <script src="searcher-c2a407aa.js"></script>
+
+        <script src="clipboard-1626706a.min.js"></script>
+        <script src="highlight-abc7f01d.js"></script>
+        <script src="book-a0b12cfe.js"></script>
+
+        <!-- Custom JS scripts -->
+
+        <script>
+        window.addEventListener('load', function() {
+            window.setTimeout(window.print, 100);
+        });
+        </script>
+
+
+    </div>
+    </body>
+</html>
