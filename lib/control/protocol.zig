@@ -162,34 +162,34 @@ pub fn decode(data: []const u8) VineError!Message {
                 .capabilities = capabilities,
             } };
         },
-        .join_announce => .{ .join_announce = .{
+        .join_announce => Message{ .join_announce = .{
             .network_id = try readNetworkId(data, &cursor),
             .prefix = try readPrefix(data, &cursor),
             .epoch = .{ .value = try readU64(data, &cursor) },
         } },
-        .route_update => .{ .route_update = .{
-            .network_id = try readNetworkId(data, &cursor),
-            .owner = try readPeerId(data, &cursor),
-            .prefix = try readPrefix(data, &cursor),
-            .epoch = .{ .value = try readU64(data, &cursor) },
-        } },
-        .route_withdraw => .{ .route_withdraw = .{
+        .route_update => Message{ .route_update = .{
             .network_id = try readNetworkId(data, &cursor),
             .owner = try readPeerId(data, &cursor),
             .prefix = try readPrefix(data, &cursor),
             .epoch = .{ .value = try readU64(data, &cursor) },
         } },
-        .keepalive => .{ .keepalive = .{
+        .route_withdraw => Message{ .route_withdraw = .{
+            .network_id = try readNetworkId(data, &cursor),
+            .owner = try readPeerId(data, &cursor),
+            .prefix = try readPrefix(data, &cursor),
+            .epoch = .{ .value = try readU64(data, &cursor) },
+        } },
+        .keepalive => Message{ .keepalive = .{
             .network_id = try readNetworkId(data, &cursor),
             .session_id = .{ .value = try readU64(data, &cursor) },
             .sent_at_ms = try readI64(data, &cursor),
         } },
-        .diagnostic_ping => .{ .diagnostic_ping = .{
+        .diagnostic_ping => Message{ .diagnostic_ping = .{
             .network_id = try readNetworkId(data, &cursor),
             .nonce = try readU64(data, &cursor),
             .sent_at_ms = try readI64(data, &cursor),
         } },
-        .diagnostic_pong => .{ .diagnostic_pong = .{
+        .diagnostic_pong => Message{ .diagnostic_pong = .{
             .network_id = try readNetworkId(data, &cursor),
             .nonce = try readU64(data, &cursor),
             .replied_at_ms = try readI64(data, &cursor),
@@ -272,9 +272,9 @@ fn appendU16(bytes: *std.ArrayList(u8), allocator: std.mem.Allocator, value: u16
 }
 
 fn appendU64(bytes: *std.ArrayList(u8), allocator: std.mem.Allocator, value: u64) !void {
-    var shift: u6 = 0;
+    var shift: usize = 0;
     while (shift < 64) : (shift += 8) {
-        try bytes.append(allocator, @intCast((value >> shift) & 0xff));
+        try bytes.append(allocator, @intCast((value >> @as(u6, @intCast(shift))) & 0xff));
     }
 }
 
@@ -330,4 +330,133 @@ fn readPrefix(data: []const u8, cursor: *usize) VineError!types.VinePrefix {
     const prefix_len = data[cursor.*];
     cursor.* += 1;
     return types.VinePrefix.init(address, prefix_len);
+}
+
+test "control protocol round trips all message variants" {
+    const allocator = std.testing.allocator;
+    const network_id = try types.NetworkId.init("devnet");
+    const peer_id = types.PeerId.init(.{0x11} ** types.peer_id_len);
+    const prefix = try types.VinePrefix.parse("10.42.0.0/24");
+
+    const messages = [_]Message{
+        .{ .hello = .{
+            .network_id = network_id,
+            .version_major = protocol_version_major,
+            .version_minor = protocol_version_minor,
+            .capabilities = .{ .relay_capable = true, .diagnostic_capable = true },
+        } },
+        .{ .join_announce = .{
+            .network_id = network_id,
+            .prefix = prefix,
+            .epoch = .{ .value = 7 },
+        } },
+        .{ .route_update = .{
+            .network_id = network_id,
+            .owner = peer_id,
+            .prefix = prefix,
+            .epoch = .{ .value = 8 },
+        } },
+        .{ .route_withdraw = .{
+            .network_id = network_id,
+            .owner = peer_id,
+            .prefix = prefix,
+            .epoch = .{ .value = 9 },
+        } },
+        .{ .keepalive = .{
+            .network_id = network_id,
+            .session_id = .{ .value = 12 },
+            .sent_at_ms = 1234,
+        } },
+        .{ .diagnostic_ping = .{
+            .network_id = network_id,
+            .nonce = 55,
+            .sent_at_ms = 4567,
+        } },
+        .{ .diagnostic_pong = .{
+            .network_id = network_id,
+            .nonce = 55,
+            .replied_at_ms = 4568,
+        } },
+    };
+
+    inline for (messages) |message| {
+        const encoded = try encodeAlloc(allocator, message);
+        defer allocator.free(encoded);
+
+        const decoded = try decode(encoded);
+        switch (message) {
+            .hello => |m| {
+                try std.testing.expectEqual(MessageTag.hello, std.meta.activeTag(decoded));
+                try std.testing.expect(decoded.hello.network_id.eql(m.network_id));
+                try std.testing.expectEqual(m.version_major, decoded.hello.version_major);
+                try std.testing.expectEqual(m.version_minor, decoded.hello.version_minor);
+            },
+            .join_announce => |m| {
+                try std.testing.expect(decoded.join_announce.network_id.eql(m.network_id));
+                try std.testing.expect(decoded.join_announce.prefix.network.eql(m.prefix.network));
+                try std.testing.expectEqual(m.epoch.value, decoded.join_announce.epoch.value);
+            },
+            .route_update => |m| {
+                try std.testing.expect(decoded.route_update.owner.eql(m.owner));
+                try std.testing.expect(decoded.route_update.prefix.network.eql(m.prefix.network));
+            },
+            .route_withdraw => |m| {
+                try std.testing.expect(decoded.route_withdraw.owner.eql(m.owner));
+                try std.testing.expectEqual(m.epoch.value, decoded.route_withdraw.epoch.value);
+            },
+            .keepalive => |m| {
+                try std.testing.expectEqual(m.session_id.value, decoded.keepalive.session_id.value);
+                try std.testing.expectEqual(m.sent_at_ms, decoded.keepalive.sent_at_ms);
+            },
+            .diagnostic_ping => |m| {
+                try std.testing.expectEqual(m.nonce, decoded.diagnostic_ping.nonce);
+                try std.testing.expectEqual(m.sent_at_ms, decoded.diagnostic_ping.sent_at_ms);
+            },
+            .diagnostic_pong => |m| {
+                try std.testing.expectEqual(m.nonce, decoded.diagnostic_pong.nonce);
+                try std.testing.expectEqual(m.replied_at_ms, decoded.diagnostic_pong.replied_at_ms);
+            },
+        }
+    }
+}
+
+test "control protocol rejects malformed payloads and mismatches" {
+    const allocator = std.testing.allocator;
+    const network_id = try types.NetworkId.init("devnet");
+    const wrong_network = try types.NetworkId.init("othernet");
+    const peer_id = types.PeerId.init(.{0x22} ** types.peer_id_len);
+
+    const hello = Message{ .hello = .{
+        .network_id = network_id,
+        .version_major = protocol_version_major,
+        .version_minor = protocol_version_minor,
+        .capabilities = .{},
+    } };
+    const encoded = try encodeAlloc(allocator, hello);
+    defer allocator.free(encoded);
+
+    const truncated = try allocator.dupe(u8, encoded[0 .. encoded.len - 1]);
+    defer allocator.free(truncated);
+    try std.testing.expectError(VineError.InvalidControlMessage, decode(truncated));
+
+    var wrong_version = try allocator.dupe(u8, encoded);
+    defer allocator.free(wrong_version);
+    wrong_version[1] = 0xff;
+    try std.testing.expectError(VineError.VersionMismatch, decode(wrong_version));
+
+    try std.testing.expect(fitsSetupMetadata(hello));
+    try std.testing.expectError(VineError.NetworkMismatch, validate(hello, .{
+        .network_id = wrong_network,
+    }));
+
+    const route_update = Message{ .route_update = .{
+        .network_id = network_id,
+        .owner = peer_id,
+        .prefix = try types.VinePrefix.parse("10.42.1.0/24"),
+        .epoch = .{ .value = 3 },
+    } };
+    try std.testing.expectError(VineError.PeerMismatch, validate(route_update, .{
+        .network_id = network_id,
+        .peer_id = types.PeerId.init(.{0x33} ** types.peer_id_len),
+    }));
 }

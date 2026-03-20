@@ -25,11 +25,11 @@ pub const NetworkId = struct {
         return init(value);
     }
 
-    pub fn encode(self: NetworkId) []const u8 {
+    pub fn encode(self: *const NetworkId) []const u8 {
         return self.bytes[0..self.len];
     }
 
-    pub fn eql(self: NetworkId, other: NetworkId) bool {
+    pub fn eql(self: *const NetworkId, other: NetworkId) bool {
         return std.mem.eql(u8, self.encode(), other.encode());
     }
 };
@@ -137,15 +137,15 @@ pub const PeerId = struct {
         return init(out);
     }
 
-    pub fn encode(self: PeerId) []const u8 {
+    pub fn encode(self: *const PeerId) []const u8 {
         return &self.bytes;
     }
 
-    pub fn eql(self: PeerId, other: PeerId) bool {
+    pub fn eql(self: *const PeerId, other: PeerId) bool {
         return std.mem.eql(u8, &self.bytes, &other.bytes);
     }
 
-    pub fn format(self: PeerId, writer: anytype) !void {
+    pub fn format(self: *const PeerId, writer: anytype) !void {
         for (self.bytes) |byte| {
             try writer.print("{x:0>2}", .{byte});
         }
