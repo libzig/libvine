@@ -188,14 +188,18 @@ fn applyBootstrapPeerField(peer: *FileConfig.BootstrapPeer, key: []const u8, val
 }
 
 fn applyAllowedPeerField(peer: *FileConfig.AllowedPeer, key: []const u8, value: []const u8) ParseError!void {
-    const text = parseString(value) orelse return ParseError.InvalidConfig;
-
     if (std.mem.eql(u8, key, "peer_id")) {
+        const text = parseString(value) orelse return ParseError.InvalidConfig;
         peer.peer_id = text;
         return;
     }
     if (std.mem.eql(u8, key, "prefix")) {
+        const text = parseString(value) orelse return ParseError.InvalidConfig;
         peer.prefix = text;
+        return;
+    }
+    if (std.mem.eql(u8, key, "relay_capable")) {
+        peer.relay_capable = parseBool(value) orelse return ParseError.InvalidConfig;
         return;
     }
 
@@ -205,6 +209,12 @@ fn applyAllowedPeerField(peer: *FileConfig.AllowedPeer, key: []const u8, value: 
 fn parseString(value: []const u8) ?[]const u8 {
     if (value.len < 2 or value[0] != '"' or value[value.len - 1] != '"') return null;
     return value[1 .. value.len - 1];
+}
+
+fn parseBool(value: []const u8) ?bool {
+    if (std.mem.eql(u8, value, "true")) return true;
+    if (std.mem.eql(u8, value, "false")) return false;
+    return null;
 }
 
 test "file config module exists" {
@@ -309,4 +319,19 @@ test "parse reads allowed peer records with prefix ownership" {
     try std.testing.expectEqualStrings("peer-a", cfg.allowed_peers[0].peer_id);
     try std.testing.expectEqualStrings("10.42.2.0/24", cfg.allowed_peers[1].prefix);
     try std.testing.expect(!cfg.allowed_peers[0].relay_capable);
+}
+
+test "parse reads relay capability flags for allowed peers" {
+    const raw =
+        \\[[allowed_peers]]
+        \\peer_id = "relay"
+        \\prefix = "10.42.254.0/24"
+        \\relay_capable = true
+    ;
+
+    var cfg = try parse(std.testing.allocator, raw);
+    defer cfg.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(@as(usize, 1), cfg.allowed_peers.len);
+    try std.testing.expect(cfg.allowed_peers[0].relay_capable);
 }
