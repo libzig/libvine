@@ -33,3 +33,9 @@ pub const RouteWithdraw = struct {
     prefix: types.VinePrefix,
     epoch: types.MembershipEpoch,
 };
+
+pub const Keepalive = struct {
+    network_id: types.NetworkId,
+    session_id: types.SessionId,
+    sent_at_ms: i64,
+};
