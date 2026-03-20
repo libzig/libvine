@@ -107,6 +107,29 @@ pub const TunRuntime = struct {
         return changed;
     }
 
+    pub fn cleanupStalePeerSession(self: *TunRuntime, peer_id: core.types.PeerId) bool {
+        const fallback = self.node.session_table.fallbackToRelay(peer_id);
+        if (!self.node.cleanupStaleSession(peer_id)) return false;
+
+        for (self.node.route_table.entries) |*entry| {
+            if (!entry.peer_id.eql(peer_id)) continue;
+            if (fallback) |relay| {
+                entry.session_id = relay.session_id;
+                entry.preference = .relay;
+                entry.tombstone = false;
+                continue;
+            }
+            for (self.installed_routes) |*installed| {
+                if (installed.prefix.network.eql(entry.prefix.network) and installed.prefix.prefix_len == entry.prefix.prefix_len) {
+                    linux.routes.withdraw(installed);
+                }
+            }
+            entry.session_id = null;
+            entry.tombstone = true;
+        }
+        return true;
+    }
+
     fn isAuthorizedPeer(self: TunRuntime, peer_id: core.types.PeerId) bool {
         for (self.node.config.allowlist) |allowed| {
             if (allowed.eql(peer_id)) return true;
@@ -473,4 +496,63 @@ test "tun runtime detaches routes when membership is withdrawn" {
     try std.testing.expect(runtime.withdrawPeerMembership(peer));
     try std.testing.expect(runtime.node.route_table.entries[0].tombstone);
     try std.testing.expect(!runtime.installed_routes[0].active);
+}
+
+test "tun runtime downgrades or detaches routes during stale session cleanup" {
+    const std = @import("std");
+
+    const relay_peer = core.types.PeerId.init(.{0x88} ** core.types.peer_id_len);
+    const drop_peer = core.types.PeerId.init(.{0x89} ** core.types.peer_id_len);
+    const relay_prefix = try core.types.VinePrefix.parse("10.42.12.0/24");
+    const drop_prefix = try core.types.VinePrefix.parse("10.42.13.0/24");
+    var routes = [_]core.route_table.RouteEntry{
+        .{
+            .prefix = relay_prefix,
+            .peer_id = relay_peer,
+            .session_id = .{ .value = 91 },
+            .epoch = .{ .value = 1 },
+            .preference = .direct,
+        },
+        .{
+            .prefix = drop_prefix,
+            .peer_id = drop_peer,
+            .session_id = .{ .value = 93 },
+            .epoch = .{ .value = 1 },
+            .preference = .direct,
+        },
+    };
+    var sessions = [_]core.session_table.ActiveSession{
+        .{ .peer_id = relay_peer, .session_id = .{ .value = 91 }, .preference = .direct },
+        .{ .peer_id = relay_peer, .session_id = .{ .value = 92 }, .preference = .relay },
+        .{ .peer_id = drop_peer, .session_id = .{ .value = 93 }, .preference = .direct },
+    };
+    var memberships = [_]core.membership.PeerMembership{};
+    var installed = [_]linux.routes.InstalledRoute{
+        .{ .prefix = relay_prefix, .active = true },
+        .{ .prefix = drop_prefix, .active = true },
+    };
+
+    var node = try api.node.Node.init(.{
+        .network_id = try core.types.NetworkId.init("home-net"),
+        .tun = .{
+            .ifname = [_]u8{ 'v', 'i', 'n', 'e', '9', 0 } ++ ([_]u8{0} ** 10),
+            .local_address = try core.types.VineAddress.parse("10.42.0.1"),
+            .prefix_len = 24,
+            .mtu = 1400,
+        },
+    }, .{
+        .routes = &routes,
+        .sessions = &sessions,
+        .memberships = &memberships,
+    });
+    var runtime = TunRuntime.init(&node, &installed);
+
+    try std.testing.expect(runtime.cleanupStalePeerSession(relay_peer));
+    try std.testing.expectEqual(core.route_table.RouteEntry.Preference.relay, runtime.node.route_table.entries[0].preference);
+    try std.testing.expectEqual(@as(u64, 92), runtime.node.route_table.entries[0].session_id.?.value);
+    try std.testing.expect(runtime.installed_routes[0].active);
+
+    try std.testing.expect(runtime.cleanupStalePeerSession(drop_peer));
+    try std.testing.expect(runtime.node.route_table.entries[1].tombstone);
+    try std.testing.expect(!runtime.installed_routes[1].active);
 }
