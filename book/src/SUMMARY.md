@@ -1,6 +1,7 @@
 # Summary
 
 - [Introduction](./index.md)
+- [CLI](./cli.md)
 - [Architecture](./architecture.md)
 - [MVP](./mvp.md)
 - [Addressing](./addressing.md)
