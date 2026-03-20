@@ -216,6 +216,10 @@ pub fn runSnapshot(args: []const []const u8, default_config_path: []const u8, st
     try printSnapshot(snapshot, peers, routes, sessions_view, counters, parsed.output_mode);
 }
 
+pub fn runDiagnostics(args: []const []const u8, default_config_path: []const u8, state_path: []const u8) !void {
+    try runSnapshot(args, default_config_path, state_path);
+}
+
 pub fn runPing(args: []const []const u8, default_config_path: []const u8) !void {
     const parsed = try parsePingArgs(args, default_config_path);
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -618,25 +622,137 @@ fn printSnapshot(
     counters: CounterDiagnostics,
     output_mode: OutputMode,
 ) !void {
-    if (output_mode == .json) {
-        try printStatus(snapshot, .json);
-        try printPeers(peers, .json);
-        try printRoutes(routes, .json);
-        var buffer_json = std.ArrayList(u8).empty;
-        defer buffer_json.deinit(std.heap.page_allocator);
-        try renderSessions(buffer_json.writer(std.heap.page_allocator), sessions, .json);
-        std.debug.print("{s}", .{buffer_json.items});
-        try printCounters(counters, .json);
-        return;
-    }
-    try printStatus(snapshot, output_mode);
-    try printPeers(peers, output_mode);
-    try printRoutes(routes, output_mode);
     var buffer = std.ArrayList(u8).empty;
     defer buffer.deinit(std.heap.page_allocator);
-    try renderSessions(buffer.writer(std.heap.page_allocator), sessions, output_mode);
+    try renderSnapshot(buffer.writer(std.heap.page_allocator), snapshot, peers, routes, sessions, counters, output_mode);
     std.debug.print("{s}", .{buffer.items});
-    try printCounters(counters, output_mode);
+}
+
+fn renderSnapshot(
+    writer: anytype,
+    snapshot: DiagnosticsSnapshot,
+    peers: []const PeerDiagnostics,
+    routes: []const RouteDiagnostics,
+    sessions: []const SessionDiagnostics,
+    counters: CounterDiagnostics,
+    output_mode: OutputMode,
+) !void {
+    if (output_mode == .json) {
+        var prefix_buffer: [32]u8 = undefined;
+        const prefix_text = try std.fmt.bufPrint(
+            &prefix_buffer,
+            "{f}/{d}",
+            .{ snapshot.local_prefix.network, snapshot.local_prefix.prefix_len },
+        );
+        try writer.print(
+            "{{\"command\":\"snapshot\",\"status\":{{\"phase\":\"{s}\",\"pid\":{?d},\"network_id\":\"{s}\",\"peer_id\":\"{f}\",\"prefix\":\"{s}\",\"peers\":{d},\"bootstrap_peers\":{d}}},\"peers\":[",
+            .{
+                @tagName(snapshot.daemon_phase),
+                snapshot.daemon_pid,
+                snapshot.network_id.encode(),
+                snapshot.local_peer_id,
+                prefix_text,
+                snapshot.peer_count,
+                snapshot.bootstrap_count,
+            },
+        );
+        for (peers, 0..) |peer, i| {
+            var peer_prefix_buffer: [32]u8 = undefined;
+            const peer_prefix_text = try std.fmt.bufPrint(
+                &peer_prefix_buffer,
+                "{f}/{d}",
+                .{ peer.prefix.network, peer.prefix.prefix_len },
+            );
+            if (i != 0) try writer.writeAll(",");
+            try writer.print(
+                "{{\"peer_id\":\"{f}\",\"prefix\":\"{s}\",\"relay_capable\":{any}}}",
+                .{ peer.peer_id, peer_prefix_text, peer.relay_capable },
+            );
+        }
+        try writer.writeAll("],\"routes\":[");
+        for (routes, 0..) |route, i| {
+            var route_prefix_buffer: [32]u8 = undefined;
+            const route_prefix_text = try std.fmt.bufPrint(
+                &route_prefix_buffer,
+                "{f}/{d}",
+                .{ route.prefix.network, route.prefix.prefix_len },
+            );
+            if (i != 0) try writer.writeAll(",");
+            try writer.print(
+                "{{\"prefix\":\"{s}\",\"peer_id\":\"{f}\",\"preference\":\"{s}\"}}",
+                .{ route_prefix_text, route.peer_id, preferenceLabel(route.preference) },
+            );
+        }
+        try writer.writeAll("],\"sessions\":{");
+        try writer.print(
+            "\"count\":{d},\"direct\":{d},\"signaling\":{d},\"relay\":{d},\"items\":[",
+            .{
+                sessions.len,
+                countSessionsByPreference(sessions, .direct),
+                countSessionsByPreference(sessions, .direct_after_signaling),
+                countSessionsByPreference(sessions, .relay),
+            },
+        );
+        for (sessions, 0..) |session, i| {
+            if (i != 0) try writer.writeAll(",");
+            try writer.print(
+                "{{\"peer_id\":\"{f}\",\"mode\":\"{s}\",\"session_id\":{d},\"relay_capable\":{any}}}",
+                .{ session.peer_id, preferenceLabel(session.mode), session.session_id.value, session.relay_capable },
+            );
+        }
+        try writer.writeAll("]},\"counters\":{");
+        try writer.print(
+            "\"packets_sent\":{d},\"packets_received\":{d},\"route_misses\":{d},\"session_failures\":{d},\"fallback_transitions\":{d},\"relay_usage\":{d}}}\n",
+            .{
+                counters.packets_sent,
+                counters.packets_received,
+                counters.route_misses,
+                counters.session_failures,
+                counters.fallback_transitions,
+                counters.relay_usage,
+            },
+        );
+        return;
+    }
+    try writer.print(
+        "vine status\nphase={s}\npid={?d}\nnetwork_id={s}\npeer_id={f}\nprefix={f}/{d}\npeers={d}\nbootstrap_peers={d}\n",
+        .{
+            @tagName(snapshot.daemon_phase),
+            snapshot.daemon_pid,
+            snapshot.network_id.encode(),
+            snapshot.local_peer_id,
+            snapshot.local_prefix.network,
+            snapshot.local_prefix.prefix_len,
+            snapshot.peer_count,
+            snapshot.bootstrap_count,
+        },
+    );
+    try writer.print("vine peers\ncount={d}\n", .{peers.len});
+    for (peers) |peer| {
+        try writer.print(
+            "peer={f}\nprefix={f}/{d}\nrelay_capable={any}\n",
+            .{ peer.peer_id, peer.prefix.network, peer.prefix.prefix_len, peer.relay_capable },
+        );
+    }
+    try writer.print("vine routes\ncount={d}\n", .{routes.len});
+    for (routes) |route| {
+        try writer.print(
+            "prefix={f}/{d}\npeer={f}\npreference={s}\n",
+            .{ route.prefix.network, route.prefix.prefix_len, route.peer_id, preferenceLabel(route.preference) },
+        );
+    }
+    try renderSessions(writer, sessions, output_mode);
+    try writer.print(
+        "vine counters\npackets_sent={d}\npackets_received={d}\nroute_misses={d}\nsession_failures={d}\nfallback_transitions={d}\nrelay_usage={d}\n",
+        .{
+            counters.packets_sent,
+            counters.packets_received,
+            counters.route_misses,
+            counters.session_failures,
+            counters.fallback_transitions,
+            counters.relay_usage,
+        },
+    );
 }
 
 const PingArgs = struct {
@@ -1111,6 +1227,97 @@ test "runtime cli snapshot combines diagnostic sections" {
         .fallback_transitions = 0,
         .relay_usage = 0,
     }, .text);
+}
+
+test "runtime cli snapshot json is one coherent document" {
+    const snapshot = DiagnosticsSnapshot{
+        .daemon_phase = .running,
+        .daemon_pid = 9,
+        .network_id = try core.types.NetworkId.init("home-net"),
+        .local_peer_id = core.types.PeerId.init(.{0xA1} ** core.types.peer_id_len),
+        .local_prefix = try core.types.VinePrefix.parse("10.42.0.0/24"),
+        .peer_count = 1,
+        .bootstrap_count = 1,
+    };
+    const peers = [_]PeerDiagnostics{.{
+        .peer_id = core.types.PeerId.init(.{0xA2} ** core.types.peer_id_len),
+        .prefix = try core.types.VinePrefix.parse("10.42.1.0/24"),
+        .relay_capable = true,
+    }};
+    const routes = [_]RouteDiagnostics{.{
+        .prefix = try core.types.VinePrefix.parse("10.42.1.0/24"),
+        .peer_id = peers[0].peer_id,
+        .preference = .relay,
+    }};
+    const sessions = [_]SessionDiagnostics{.{
+        .peer_id = peers[0].peer_id,
+        .session_id = .{ .value = 54 },
+        .mode = .relay,
+        .relay_capable = true,
+    }};
+    var buffer = std.ArrayList(u8).empty;
+    defer buffer.deinit(std.testing.allocator);
+    try renderSnapshot(buffer.writer(std.testing.allocator), snapshot, &peers, &routes, &sessions, .{
+        .packets_sent = 0,
+        .packets_received = 0,
+        .route_misses = 0,
+        .session_failures = 0,
+        .fallback_transitions = 0,
+        .relay_usage = 1,
+    }, .json);
+
+    try std.testing.expect(std.mem.indexOf(u8, buffer.items, "\"command\":\"snapshot\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, buffer.items, "\"status\":{") != null);
+    try std.testing.expect(std.mem.indexOf(u8, buffer.items, "\"peers\":[") != null);
+    try std.testing.expect(std.mem.indexOf(u8, buffer.items, "\"routes\":[") != null);
+    try std.testing.expect(std.mem.indexOf(u8, buffer.items, "\"sessions\":{") != null);
+    try std.testing.expect(std.mem.indexOf(u8, buffer.items, "\"counters\":{") != null);
+    try std.testing.expect(std.mem.indexOf(u8, buffer.items, "}\n") != null);
+}
+
+test "runtime cli diagnostics alias accepts snapshot-style arguments" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const root = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(root);
+    const identity_path = try std.fmt.allocPrint(std.testing.allocator, "{s}/identity", .{root});
+    defer std.testing.allocator.free(identity_path);
+    const stored = try @import("../config/identity_store.zig").generateAndWrite(identity_path);
+
+    const config_body = try std.fmt.allocPrint(
+        std.testing.allocator,
+        \\[node]
+        \\name = "alpha"
+        \\network_id = "home-net"
+        \\identity_path = "{s}"
+        \\
+        \\[tun]
+        \\name = "vine0"
+        \\address = "10.42.0.1"
+        \\prefix_len = 24
+        \\mtu = 1400
+        \\
+        \\[[allowed_peers]]
+        \\peer_id = "{f}"
+        \\prefix = "10.42.1.0/24"
+        \\relay_capable = true
+        ,
+        .{ identity_path, stored.bound.peer_id },
+    );
+    defer std.testing.allocator.free(config_body);
+    try tmp.dir.writeFile(.{ .sub_path = "vine.toml", .data = config_body });
+    try tmp.dir.writeFile(.{
+        .sub_path = "state.txt",
+        .data = "phase=running\npid=7\nconfig_path=/etc/libvine/vine.toml\n",
+    });
+
+    const config_path = try std.fmt.allocPrint(std.testing.allocator, "{s}/vine.toml", .{root});
+    defer std.testing.allocator.free(config_path);
+    const state_path = try std.fmt.allocPrint(std.testing.allocator, "{s}/state.txt", .{root});
+    defer std.testing.allocator.free(state_path);
+
+    try runDiagnostics(&.{ "-c", config_path, "--format", "json" }, "/etc/libvine/vine.toml", state_path);
 }
 
 test "runtime cli parses ping arguments" {

@@ -120,6 +120,7 @@ fn loadSeedRecords(allocator: std.mem.Allocator, allowed_peers: []const file_con
 }
 
 fn loadBootstrapPeers(allocator: std.mem.Allocator, bootstrap_peers: []const file_config.FileConfig.BootstrapPeer) ![]api.config.BootstrapPeer {
+    try validateBootstrapPeers(bootstrap_peers);
     const peers = try allocator.alloc(api.config.BootstrapPeer, bootstrap_peers.len);
     errdefer {
         for (peers[0..bootstrap_peers.len]) |peer| {
@@ -136,6 +137,16 @@ fn loadBootstrapPeers(allocator: std.mem.Allocator, bootstrap_peers: []const fil
         };
     }
     return peers;
+}
+
+fn validateBootstrapPeers(bootstrap_peers: []const file_config.FileConfig.BootstrapPeer) !void {
+    for (bootstrap_peers, 0..) |peer, i| {
+        if (peer.peer_id.len == 0 or peer.address.len == 0) return error.InvalidConfig;
+        if (std.mem.indexOf(u8, peer.address, "://") == null) return error.InvalidConfig;
+        for (bootstrap_peers[i + 1 ..]) |other| {
+            if (std.mem.eql(u8, peer.peer_id, other.peer_id)) return error.InvalidConfig;
+        }
+    }
 }
 
 fn loadRelayPeers(allocator: std.mem.Allocator, allowed_peers: []const file_config.FileConfig.AllowedPeer) ![]core.types.PeerId {
@@ -418,6 +429,47 @@ test "runtime config keeps identity and configured prefix as distinct concerns" 
     try std.testing.expect(loaded_a.node_config.local_peer_id.?.eql(stored.bound.peer_id));
     try std.testing.expect(loaded_b.node_config.local_peer_id.?.eql(stored.bound.peer_id));
     try std.testing.expect(!loaded_a.local_membership.prefix.network.eql(loaded_b.local_membership.prefix.network));
+}
+
+test "runtime config rejects bootstrap peers with duplicate identities or empty addresses" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const root = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(root);
+    const identity_path = try std.fmt.allocPrint(std.testing.allocator, "{s}/identity", .{root});
+    defer std.testing.allocator.free(identity_path);
+    const stored = try identity_store.generateAndWrite(identity_path);
+
+    const config_path = try std.fmt.allocPrint(std.testing.allocator, "{s}/vine.toml", .{root});
+    defer std.testing.allocator.free(config_path);
+    const config_body = try std.fmt.allocPrint(
+        std.testing.allocator,
+        \\[node]
+        \\name = "alpha"
+        \\network_id = "home-net"
+        \\identity_path = "{s}"
+        \\
+        \\[tun]
+        \\name = "vine0"
+        \\address = "10.42.0.1"
+        \\prefix_len = 24
+        \\mtu = 1400
+        \\
+        \\[[bootstrap_peers]]
+        \\peer_id = "{f}"
+        \\address = "udp://198.51.100.10:4100"
+        \\
+        \\[[bootstrap_peers]]
+        \\peer_id = "{f}"
+        \\address = ""
+        ,
+        .{ identity_path, stored.bound.peer_id, stored.bound.peer_id },
+    );
+    defer std.testing.allocator.free(config_body);
+    try tmp.dir.writeFile(.{ .sub_path = "vine.toml", .data = config_body });
+
+    try std.testing.expectError(error.InvalidConfig, load(std.testing.allocator, config_path));
 }
 
 test "runtime config rejects overlapping configured peer prefixes" {

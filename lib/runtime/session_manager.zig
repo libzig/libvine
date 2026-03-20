@@ -34,6 +34,7 @@ pub const SessionManager = struct {
     pub fn connectConfiguredPeers(self: *SessionManager) usize {
         var connected: usize = 0;
         for (self.configured_peers) |peer| {
+            if (self.preferredSessionForPeer(peer.peer_id) != null) continue;
             const handle = self.mesh.openSession(peer.peer_id) orelse continue;
             if (self.trackHandle(peer, handle)) {
                 connected += 1;
@@ -501,4 +502,36 @@ test "session manager handles churn promotion and failover across reconnects" {
         .plan = .{ .direct = direct_candidate },
     }));
     try @import("std").testing.expectEqual(@as(u64, 92), manager.preferredSessionForPeer(peer.peer_id).?.session_id.value);
+}
+
+test "session manager ignores duplicate configured peers during initial connect" {
+    const libmesh = @import("libmesh");
+    const node = libmesh.Foundation.NodeId.fromPublicKey([_]u8{0x85} ** 32);
+    const peer = ManagedPeer{
+        .peer_id = core.types.PeerId.init(node.toBytes()),
+        .relay_capable = true,
+    };
+    var sessions = [_]core.session_table.ActiveSession{
+        .{ .peer_id = core.types.PeerId.init(.{0} ** core.types.peer_id_len), .session_id = .{ .value = 0 }, .preference = .relay },
+        .{ .peer_id = core.types.PeerId.init(.{0} ** core.types.peer_id_len), .session_id = .{ .value = 0 }, .preference = .relay },
+    };
+    var manager = SessionManager.withMesh(
+        &.{ peer, peer },
+        &sessions,
+        integration.libmesh_adapter.LibmeshAdapter.withReachability(
+            &.{.{
+                .peer_id = peer.peer_id,
+                .node_id = node,
+            }},
+            &.{.{
+                .direct = .{
+                    .peer_id = peer.peer_id,
+                    .node_id = node,
+                },
+            }},
+        ),
+    );
+
+    try @import("std").testing.expectEqual(@as(usize, 1), manager.connectConfiguredPeers());
+    try @import("std").testing.expectEqual(@as(usize, 1), manager.directSessionCount());
 }

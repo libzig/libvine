@@ -1,6 +1,7 @@
 const std = @import("std");
 const file_config = @import("../config/file.zig");
 const identity_store = @import("../config/identity_store.zig");
+const runtime = @import("../runtime/runtime.zig");
 
 const Subcommand = enum {
     validate,
@@ -35,10 +36,18 @@ fn handleValidate(args: []const []const u8, default_config_path: []const u8) !vo
     var cfg = try file_config.parse(allocator, raw);
     defer cfg.deinit(allocator);
     try validateFilesystem(config_path, cfg.node.identity_path);
+    var runtime_cfg = try runtime.runtime_config.load(allocator, config_path);
+    defer runtime_cfg.deinit(allocator);
 
     std.debug.print(
-        "config valid\npath={s}\nnetwork_id={s}\ntun={s}\n",
-        .{ config_path, cfg.node.network_id, cfg.tun.name },
+        "config valid\npath={s}\nnetwork_id={s}\ntun={s}\nallowed_peers={d}\nbootstrap_peers={d}\n",
+        .{
+            config_path,
+            cfg.node.network_id,
+            cfg.tun.name,
+            runtime_cfg.enrolled_peers.len,
+            runtime_cfg.startup_bootstrap_peers.len,
+        },
     );
 }
 
@@ -144,6 +153,103 @@ test "validate accepts a well formed config file" {
     defer std.testing.allocator.free(config_path);
 
     try handleValidate(&.{ "-c", config_path }, "/etc/libvine/vine.toml");
+}
+
+test "validate rejects tun names that cannot be loaded into runtime state" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const dir_path = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(dir_path);
+
+    const identity_path = try std.fmt.allocPrint(std.testing.allocator, "{s}/identity", .{dir_path});
+    defer std.testing.allocator.free(identity_path);
+    _ = try identity_store.generateAndWrite(identity_path);
+
+    const config_body = try std.fmt.allocPrint(
+        std.testing.allocator,
+        \\[node]
+        \\name = "alpha"
+        \\network_id = "home-net"
+        \\identity_path = "{s}"
+        \\
+        \\[tun]
+        \\name = "vine-interface-too-long"
+        \\address = "10.42.0.1"
+        \\prefix_len = 24
+        \\mtu = 1400
+        ,
+        .{identity_path},
+    );
+    defer std.testing.allocator.free(config_body);
+
+    const config_file = try tmp.dir.createFile("vine.toml", .{ .truncate = true, .mode = 0o600 });
+    defer config_file.close();
+    try config_file.writeAll(config_body);
+
+    const config_path = try std.fmt.allocPrint(std.testing.allocator, "{s}/vine.toml", .{dir_path});
+    defer std.testing.allocator.free(config_path);
+
+    try std.testing.expectError(
+        error.InvalidConfig,
+        handleValidate(&.{ "-c", config_path }, "/etc/libvine/vine.toml"),
+    );
+}
+
+test "validate rejects overlapping allowed peer prefixes before startup" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const dir_path = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(dir_path);
+
+    const identity_path = try std.fmt.allocPrint(std.testing.allocator, "{s}/identity", .{dir_path});
+    defer std.testing.allocator.free(identity_path);
+    _ = try identity_store.generateAndWrite(identity_path);
+
+    const peer_a = [_]u8{0x41} ** 32;
+    const peer_b = [_]u8{0x42} ** 32;
+    const peer_a_hex = std.fmt.bytesToHex(peer_a, .lower);
+    const peer_b_hex = std.fmt.bytesToHex(peer_b, .lower);
+
+    const config_body = try std.fmt.allocPrint(
+        std.testing.allocator,
+        \\[node]
+        \\name = "alpha"
+        \\network_id = "home-net"
+        \\identity_path = "{s}"
+        \\
+        \\[tun]
+        \\name = "vine0"
+        \\address = "10.42.0.1"
+        \\prefix_len = 24
+        \\mtu = 1400
+        \\
+        \\[[allowed_peers]]
+        \\peer_id = "{s}"
+        \\prefix = "10.42.1.0/24"
+        \\relay_capable = false
+        \\
+        \\[[allowed_peers]]
+        \\peer_id = "{s}"
+        \\prefix = "10.42.1.128/25"
+        \\relay_capable = false
+        ,
+        .{ identity_path, &peer_a_hex, &peer_b_hex },
+    );
+    defer std.testing.allocator.free(config_body);
+
+    const config_file = try tmp.dir.createFile("vine.toml", .{ .truncate = true, .mode = 0o600 });
+    defer config_file.close();
+    try config_file.writeAll(config_body);
+
+    const config_path = try std.fmt.allocPrint(std.testing.allocator, "{s}/vine.toml", .{dir_path});
+    defer std.testing.allocator.free(config_path);
+
+    try std.testing.expectError(
+        error.InvalidConfig,
+        handleValidate(&.{ "-c", config_path }, "/etc/libvine/vine.toml"),
+    );
 }
 
 test "validate rejects relative config paths before daemon startup" {

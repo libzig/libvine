@@ -105,7 +105,7 @@ fn dispatch(command: Command, args: []const []const u8) !void {
         .counters => try libvine.cli.runtime.runCounters(args, default_config_path),
         .snapshot => try libvine.cli.runtime.runSnapshot(args, default_config_path, default_runtime_state_path),
         .ping => try libvine.cli.runtime.runPing(args, default_config_path),
-        .diagnostics => std.debug.print("vine diagnostics: not implemented yet\n", .{}),
+        .diagnostics => try libvine.cli.runtime.runDiagnostics(args, default_config_path, default_runtime_state_path),
     }
 }
 

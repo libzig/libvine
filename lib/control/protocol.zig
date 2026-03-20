@@ -152,6 +152,7 @@ pub fn decode(data: []const u8) VineError!Message {
             const network_id = try readNetworkId(data, &cursor);
             if (cursor >= data.len) return VineError.InvalidControlMessage;
             const capabilities: CapabilityFlags = @bitCast(data[cursor]);
+            if (capabilities.reserved != 0) return VineError.InvalidControlMessage;
             cursor += 1;
             const version_major = try readU16(data, &cursor);
             const version_minor = try readU16(data, &cursor);
@@ -459,4 +460,23 @@ test "control protocol rejects malformed payloads and mismatches" {
         .network_id = network_id,
         .peer_id = types.PeerId.init(.{0x33} ** types.peer_id_len),
     }));
+}
+
+test "control protocol rejects hello messages with reserved capability bits set" {
+    const allocator = std.testing.allocator;
+    const message = Message{ .hello = .{
+        .network_id = try types.NetworkId.init("devnet"),
+        .version_major = protocol_version_major,
+        .version_minor = protocol_version_minor,
+        .capabilities = .{},
+    } };
+    const encoded = try encodeAlloc(allocator, message);
+    defer allocator.free(encoded);
+
+    var mutated = try allocator.dupe(u8, encoded);
+    defer allocator.free(mutated);
+
+    const capability_index = 1 + 2 + 2 + 1 + message.hello.network_id.encode().len;
+    mutated[capability_index] = 0b1111_1000;
+    try std.testing.expectError(VineError.InvalidControlMessage, decode(mutated));
 }

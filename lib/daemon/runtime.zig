@@ -180,6 +180,10 @@ pub fn readStateFile(allocator: std.mem.Allocator, state_path: []const u8) !Snap
         .config_path = null,
         .pid = null,
     };
+    errdefer deinitSnapshot(allocator, &snapshot);
+    var saw_phase = false;
+    var saw_pid = false;
+    var saw_config_path = false;
 
     var lines = std.mem.splitScalar(u8, data, '\n');
     while (lines.next()) |line| {
@@ -187,16 +191,27 @@ pub fn readStateFile(allocator: std.mem.Allocator, state_path: []const u8) !Snap
         var parts = std.mem.splitScalar(u8, line, '=');
         const key = parts.next() orelse continue;
         const value = parts.next() orelse continue;
+        if (parts.next() != null) return error.InvalidStateFile;
 
         if (std.mem.eql(u8, key, "phase")) {
+            if (saw_phase) return error.InvalidStateFile;
+            saw_phase = true;
             snapshot.phase = parsePhase(value) orelse return error.InvalidStateFile;
         } else if (std.mem.eql(u8, key, "pid")) {
+            if (saw_pid) return error.InvalidStateFile;
+            saw_pid = true;
             const parsed = std.fmt.parseInt(std.process.Child.Id, value, 10) catch return error.InvalidStateFile;
             snapshot.pid = if (parsed == 0) null else parsed;
         } else if (std.mem.eql(u8, key, "config_path")) {
+            if (saw_config_path) return error.InvalidStateFile;
+            saw_config_path = true;
             snapshot.config_path = if (value.len == 0) null else try allocator.dupe(u8, value);
+        } else {
+            return error.InvalidStateFile;
         }
     }
+
+    if (!saw_phase) return error.InvalidStateFile;
 
     return snapshot;
 }
@@ -397,4 +412,35 @@ test "daemon runtime reports bounded shutdown failures by step" {
     );
     try std.testing.expectEqual(ShutdownStep.close_sessions, runtime.last_shutdown_failure.?);
     try std.testing.expectEqual(@as(usize, 1), runtime.shutdown_steps_completed);
+}
+
+test "daemon state file rejects duplicates unknown keys and missing phase" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    try tmp.dir.writeFile(.{
+        .sub_path = "dup.txt",
+        .data = "phase=running\nphase=stopped\n",
+    });
+    try tmp.dir.writeFile(.{
+        .sub_path = "unknown.txt",
+        .data = "phase=running\nbogus=yes\n",
+    });
+    try tmp.dir.writeFile(.{
+        .sub_path = "missing.txt",
+        .data = "pid=9\nconfig_path=/etc/libvine/vine.toml\n",
+    });
+
+    const root = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(root);
+    const dup_path = try std.fmt.allocPrint(std.testing.allocator, "{s}/dup.txt", .{root});
+    defer std.testing.allocator.free(dup_path);
+    const unknown_path = try std.fmt.allocPrint(std.testing.allocator, "{s}/unknown.txt", .{root});
+    defer std.testing.allocator.free(unknown_path);
+    const missing_path = try std.fmt.allocPrint(std.testing.allocator, "{s}/missing.txt", .{root});
+    defer std.testing.allocator.free(missing_path);
+
+    try std.testing.expectError(error.InvalidStateFile, readStateFile(std.testing.allocator, dup_path));
+    try std.testing.expectError(error.InvalidStateFile, readStateFile(std.testing.allocator, unknown_path));
+    try std.testing.expectError(error.InvalidStateFile, readStateFile(std.testing.allocator, missing_path));
 }
