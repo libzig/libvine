@@ -15,6 +15,7 @@
 - [Bootstrap And Relay](./bootstrap-and-relay.md)
 - [Enrollment Across Machines](./enrollment-across-machines.md)
 - [TUN Permissions](./tun-permissions.md)
+- [LAN Deployment](./lan-deployment.md)
 - [Operations](./operations.md)
 - [Architecture](./architecture.md)
 - [MVP](./mvp.md)
