@@ -3,6 +3,7 @@
 - [Introduction](./index.md)
 - [CLI](./cli.md)
 - [Identity](./identity.md)
+- [Configuration](./configuration.md)
 - [Operations](./operations.md)
 - [Architecture](./architecture.md)
 - [MVP](./mvp.md)
