@@ -14,3 +14,11 @@ pub const PeerMembership = struct {
     announced_at_ms: i64,
     expires_at_ms: ?i64 = null,
 };
+
+pub const LocalMembership = struct {
+    network_id: types.NetworkId,
+    peer_id: types.PeerId,
+    prefix: types.VinePrefix,
+    epoch: types.MembershipEpoch,
+    attached_at_ms: i64,
+};
