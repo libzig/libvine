@@ -17,6 +17,7 @@ pub const Node = struct {
     session_table: core.session_table.SessionTable,
     mesh: integration.libmesh_adapter.LibmeshAdapter = integration.libmesh_adapter.LibmeshAdapter.init(),
     tun: linux.tun.TunDevice,
+    running: bool = false,
 
     pub fn init(node_config: config.NodeConfig, buffers: RuntimeBuffers) !Node {
         var tun = try linux.tun.TunDevice.open();
@@ -37,6 +38,15 @@ pub const Node = struct {
             .session_table = core.session_table.SessionTable.init(buffers.sessions),
             .tun = tun,
         };
+    }
+
+    pub fn start(self: *Node) void {
+        self.running = true;
+    }
+
+    pub fn stop(self: *Node) void {
+        self.running = false;
+        self.tun.fd = -1;
     }
 };
 
@@ -75,4 +85,28 @@ test "node init wires identity membership tun and state tables" {
     try std.testing.expectEqual(@as(i32, 1), node.tun.fd);
     try std.testing.expect(node.local_membership.?.peer_id.eql(node.local_peer_id));
     try std.testing.expect(node.local_membership.?.prefix.contains(core.types.VineAddress.init(.{ 10, 60, 0, 99 })));
+}
+
+test "node start and stop bound runtime ownership" {
+    var routes = [_]core.route_table.RouteEntry{};
+    var sessions = [_]core.session_table.ActiveSession{};
+
+    var node = try Node.init(.{
+        .network_id = try core.types.NetworkId.init("devnet"),
+        .tun = .{
+            .ifname = [_]u8{ 'v', 'n', '2', 0 } ++ ([_]u8{0} ** 12),
+            .local_address = core.types.VineAddress.init(.{ 10, 61, 0, 1 }),
+            .prefix_len = 24,
+        },
+    }, .{
+        .routes = &routes,
+        .sessions = &sessions,
+    });
+
+    try std.testing.expect(!node.running);
+    node.start();
+    try std.testing.expect(node.running);
+    node.stop();
+    try std.testing.expect(!node.running);
+    try std.testing.expectEqual(@as(i32, -1), node.tun.fd);
 }
