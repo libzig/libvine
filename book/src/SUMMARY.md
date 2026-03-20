@@ -11,6 +11,7 @@
 - [Packet Flow](./packet-flow.md)
 - [Diagnostics](./diagnostics.md)
 - [Multi-PC Showcase](./showcase.md)
+- [Copying To Multiple Machines](./copying-to-machines.md)
 - [Operations](./operations.md)
 - [Architecture](./architecture.md)
 - [MVP](./mvp.md)
