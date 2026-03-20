@@ -60,12 +60,7 @@ pub const VineAddress = struct {
         return std.mem.eql(u8, &self.octets, &other.octets);
     }
 
-    pub fn format(
-        self: VineAddress,
-        comptime _: []const u8,
-        _: std.fmt.FormatOptions,
-        writer: anytype,
-    ) !void {
+    pub fn format(self: VineAddress, writer: anytype) !void {
         try writer.print("{d}.{d}.{d}.{d}", .{
             self.octets[0],
             self.octets[1],
@@ -150,13 +145,10 @@ pub const PeerId = struct {
         return std.mem.eql(u8, &self.bytes, &other.bytes);
     }
 
-    pub fn format(
-        self: PeerId,
-        comptime _: []const u8,
-        _: std.fmt.FormatOptions,
-        writer: anytype,
-    ) !void {
-        try writer.print("{}", .{std.fmt.fmtSliceHexLower(&self.bytes)});
+    pub fn format(self: PeerId, writer: anytype) !void {
+        for (self.bytes) |byte| {
+            try writer.print("{x:0>2}", .{byte});
+        }
     }
 };
 
@@ -200,3 +192,84 @@ pub const PacketKind = enum(u8) {
     keepalive = 3,
     diagnostic = 4,
 };
+
+test "NetworkId encode decode and equality" {
+    const a = try NetworkId.init("devnet");
+    const b = try NetworkId.decode("devnet");
+    const c = try NetworkId.init("othernet");
+
+    try std.testing.expectEqualStrings("devnet", a.encode());
+    try std.testing.expect(a.eql(b));
+    try std.testing.expect(!a.eql(c));
+    try std.testing.expectError(VineError.InvalidNetworkId, NetworkId.init(""));
+}
+
+test "VineAddress parses formats and compares" {
+    const address = try VineAddress.parse("10.42.0.7");
+    const expected = VineAddress.init(.{ 10, 42, 0, 7 });
+
+    try std.testing.expect(address.eql(expected));
+
+    var buffer: [32]u8 = undefined;
+    const text = try std.fmt.bufPrint(&buffer, "{f}", .{address});
+    try std.testing.expectEqualStrings("10.42.0.7", text);
+    try std.testing.expectError(VineError.InvalidVineAddress, VineAddress.parse("10.42.0"));
+    try std.testing.expectError(VineError.InvalidVineAddress, VineAddress.parse("999.1.1.1"));
+}
+
+test "VinePrefix parses normalizes and contains addresses" {
+    const prefix = try VinePrefix.parse("10.42.0.99/24");
+
+    try std.testing.expectEqual(@as(u8, 24), prefix.prefix_len);
+    try std.testing.expect(prefix.network.eql(VineAddress.init(.{ 10, 42, 0, 0 })));
+    try std.testing.expect(prefix.contains(try VineAddress.parse("10.42.0.7")));
+    try std.testing.expect(!prefix.contains(try VineAddress.parse("10.42.1.7")));
+    try std.testing.expectError(VineError.InvalidVinePrefix, VinePrefix.parse("10.42.0.0/33"));
+}
+
+test "PeerId validates byte length and formatting" {
+    const bytes = [_]u8{0xaa} ** peer_id_len;
+    const peer = PeerId.init(bytes);
+    const decoded = try PeerId.decode(&bytes);
+
+    try std.testing.expect(peer.eql(decoded));
+
+    var buffer: [peer_id_len * 2]u8 = undefined;
+    const text = try std.fmt.bufPrint(&buffer, "{f}", .{peer});
+    try std.testing.expectEqual(@as(usize, peer_id_len * 2), text.len);
+    try std.testing.expectError(VineError.InvalidPeerId, PeerId.decode("short"));
+}
+
+test "MembershipEpoch and SessionId increment and validate bounds" {
+    const epoch = MembershipEpoch.init(7);
+    const next_epoch = try epoch.next();
+    try std.testing.expect(epoch.eql(MembershipEpoch.init(7)));
+    try std.testing.expect(next_epoch.eql(MembershipEpoch.init(8)));
+    try std.testing.expectError(
+        VineError.InvalidMembershipEpoch,
+        MembershipEpoch.init(std.math.maxInt(u64)).next(),
+    );
+
+    const session = SessionId.init(11);
+    const next_session = try session.next();
+    try std.testing.expect(session.eql(SessionId.init(11)));
+    try std.testing.expect(next_session.eql(SessionId.init(12)));
+    try std.testing.expectError(
+        VineError.InvalidSessionId,
+        SessionId.init(std.math.maxInt(u64)).next(),
+    );
+}
+
+test "PacketKind and shared limits stay stable" {
+    try std.testing.expectEqual(PacketKind.control, @as(PacketKind, .control));
+    try std.testing.expectEqual(PacketKind.data, @as(PacketKind, .data));
+    try std.testing.expectEqual(PacketKind.keepalive, @as(PacketKind, .keepalive));
+    try std.testing.expectEqual(PacketKind.diagnostic, @as(PacketKind, .diagnostic));
+
+    try std.testing.expectEqual(@as(usize, 64), max_network_id_len);
+    try std.testing.expectEqual(@as(usize, 32), peer_id_len);
+    try std.testing.expectEqual(@as(usize, 4 * 1024), max_control_payload_len);
+    try std.testing.expectEqual(@as(usize, 64 * 1024), max_data_payload_len);
+    try std.testing.expectEqual(@as(usize, 256), max_prefix_count);
+    try std.testing.expectEqual(@as(usize, 1024), max_route_table_entries);
+}
