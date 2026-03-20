@@ -66,6 +66,16 @@ pub fn build(b: *std.Build) void {
     });
     const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
 
+    const vine_cli_test_module = b.createModule(.{
+        .root_source_file = b.path("bin/vine.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const vine_cli_tests = b.addTest(.{
+        .root_module = vine_cli_test_module,
+    });
+    const run_vine_cli_tests = b.addRunArtifact(vine_cli_tests);
+
     const smoke_test_module = b.createModule(.{
         .root_source_file = b.path("test/smoke.zig"),
         .target = target,
@@ -80,6 +90,7 @@ pub fn build(b: *std.Build) void {
 
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_lib_unit_tests.step);
+    test_step.dependOn(&run_vine_cli_tests.step);
     test_step.dependOn(&run_smoke_tests.step);
 
     const examples_step = b.step("examples", "Build libvine examples");

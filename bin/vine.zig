@@ -78,6 +78,27 @@ fn dispatch(command: Command, args: []const []const u8) !void {
     }
 }
 
+test "help and version flags parse correctly" {
+    try std.testing.expect(isHelp("help"));
+    try std.testing.expect(isHelp("-h"));
+    try std.testing.expect(isHelp("--help"));
+    try std.testing.expect(!isHelp("identity"));
+
+    try std.testing.expect(isVersion("version"));
+    try std.testing.expect(isVersion("-v"));
+    try std.testing.expect(isVersion("--version"));
+    try std.testing.expect(!isVersion("status"));
+}
+
+test "top level commands parse correctly" {
+    try std.testing.expectEqual(Command.identity, parseCommand("identity").?);
+    try std.testing.expectEqual(Command.config, parseCommand("config").?);
+    try std.testing.expectEqual(Command.daemon, parseCommand("daemon").?);
+    try std.testing.expectEqual(Command.status, parseCommand("status").?);
+    try std.testing.expectEqual(Command.diagnostics, parseCommand("diagnostics").?);
+    try std.testing.expect(parseCommand("peers") == null);
+}
+
 fn printHelp() !void {
     std.debug.print(
         \\vine - libvine VPN CLI
