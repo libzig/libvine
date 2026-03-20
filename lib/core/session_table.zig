@@ -49,4 +49,11 @@ pub const SessionTable = struct {
         }
         return false;
     }
+
+    pub fn fallbackToRelay(self: *SessionTable, peer_id: types.PeerId) ?ActiveSession {
+        for (self.sessions) |session| {
+            if (session.peer_id.eql(peer_id) and session.preference == .relay) return session;
+        }
+        return null;
+    }
 };
