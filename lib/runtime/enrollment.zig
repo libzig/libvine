@@ -34,6 +34,9 @@ pub const EnrollmentState = struct {
         record: core.membership.PeerMembership,
     ) bool {
         if (!self.local_membership.network_id.eql(network_id)) return false;
+        if (self.ownedPrefixFor(record.peer_id)) |owned_prefix| {
+            if (!prefixEql(owned_prefix, record.prefix)) return false;
+        }
         for (memberships) |*existing| {
             if (existing.peer_id.eql(record.peer_id)) {
                 existing.* = record;
@@ -60,6 +63,10 @@ pub const EnrollmentState = struct {
         return false;
     }
 };
+
+fn prefixEql(left: core.types.VinePrefix, right: core.types.VinePrefix) bool {
+    return left.prefix_len == right.prefix_len and left.network.eql(right.network);
+}
 
 test "enrollment state captures local membership and admission policy" {
     const peer = core.types.PeerId.init(.{0x44} ** core.types.peer_id_len);
@@ -207,6 +214,35 @@ test "enrollment state rejects peers from the wrong network id" {
         .{
             .peer_id = peer,
             .prefix = try core.types.VinePrefix.parse("10.42.1.0/24"),
+            .epoch = core.types.MembershipEpoch.init(1),
+            .announced_at_ms = 1,
+        },
+    ));
+}
+
+test "enrollment state rejects peers claiming the wrong configured prefix" {
+    const peer = core.types.PeerId.init(.{0x11} ** core.types.peer_id_len);
+    var memberships = [_]core.membership.PeerMembership{std.mem.zeroes(core.membership.PeerMembership)};
+    const state = EnrollmentState{
+        .local_membership = .{
+            .network_id = try core.types.NetworkId.init("devnet"),
+            .peer_id = peer,
+            .prefix = try core.types.VinePrefix.parse("10.42.0.0/24"),
+            .epoch = core.types.MembershipEpoch.init(1),
+            .attached_at_ms = 0,
+        },
+        .admission_policy = .{ .allowed_peers = &.{peer} },
+        .enrolled_peers = &.{
+            .{ .peer_id = peer, .prefix = try core.types.VinePrefix.parse("10.42.1.0/24") },
+        },
+    };
+
+    try std.testing.expect(!state.refreshRemoteMembership(
+        try core.types.NetworkId.init("devnet"),
+        &memberships,
+        .{
+            .peer_id = peer,
+            .prefix = try core.types.VinePrefix.parse("10.99.0.0/24"),
             .epoch = core.types.MembershipEpoch.init(1),
             .announced_at_ms = 1,
         },

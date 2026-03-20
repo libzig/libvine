@@ -15,6 +15,7 @@ pub const RuntimeConfig = struct {
 
     pub fn deinit(self: *RuntimeConfig, allocator: std.mem.Allocator) void {
         allocator.free(self.node_config.allowlist);
+        allocator.free(self.node_config.seed_records);
         for (self.node_config.bootstrap_peers) |peer| allocator.free(peer.address);
         allocator.free(self.node_config.bootstrap_peers);
         allocator.free(self.relay_peers);
@@ -39,6 +40,8 @@ pub fn load(allocator: std.mem.Allocator, config_path: []const u8) !RuntimeConfi
     const stored = try identity_store.readFile(allocator, parsed.node.identity_path);
     const allowlist = try loadAllowlist(allocator, parsed.allowed_peers);
     errdefer allocator.free(allowlist);
+    const seed_records = try loadSeedRecords(allocator, parsed.allowed_peers);
+    errdefer allocator.free(seed_records);
     const bootstrap_peers = try loadBootstrapPeers(allocator, parsed.bootstrap_peers);
     errdefer allocator.free(bootstrap_peers);
     const relay_peers = try loadRelayPeers(allocator, parsed.allowed_peers);
@@ -54,6 +57,7 @@ pub fn load(allocator: std.mem.Allocator, config_path: []const u8) !RuntimeConfi
             .tun = try loadTunConfig(parsed.tun),
             .allowlist = allowlist,
             .bootstrap_peers = bootstrap_peers,
+            .seed_records = seed_records,
             .policy = .{
                 .allow_relay = parsed.policy.allow_relay,
                 .allow_signaling_upgrade = parsed.policy.allow_signaling_upgrade,
@@ -102,6 +106,17 @@ fn loadAllowlist(allocator: std.mem.Allocator, allowed_peers: []const file_confi
         peers[i] = try parsePeerId(peer.peer_id);
     }
     return peers;
+}
+
+fn loadSeedRecords(allocator: std.mem.Allocator, allowed_peers: []const file_config.FileConfig.AllowedPeer) ![]api.config.SeedRecord {
+    const records = try allocator.alloc(api.config.SeedRecord, allowed_peers.len);
+    for (allowed_peers, 0..) |peer, i| {
+        records[i] = .{
+            .peer_id = try parsePeerId(peer.peer_id),
+            .published_prefix = try core.types.VinePrefix.parse(peer.prefix),
+        };
+    }
+    return records;
 }
 
 fn loadBootstrapPeers(allocator: std.mem.Allocator, bootstrap_peers: []const file_config.FileConfig.BootstrapPeer) ![]api.config.BootstrapPeer {

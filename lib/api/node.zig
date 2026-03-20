@@ -147,10 +147,20 @@ pub const Node = struct {
 
     pub fn refreshRemoteMembershipForNetwork(self: *Node, network_id: core.types.NetworkId, membership: core.membership.PeerMembership) bool {
         const local_membership = self.local_membership orelse return false;
+        var enrolled_peers_buffer: [core.types.max_prefix_count]enrollment.EnrollmentState.EnrolledPeer = undefined;
+        var enrolled_count: usize = 0;
+        for (self.config.seed_records) |record| {
+            if (enrolled_count >= enrolled_peers_buffer.len) break;
+            enrolled_peers_buffer[enrolled_count] = .{
+                .peer_id = record.peer_id,
+                .prefix = record.published_prefix,
+            };
+            enrolled_count += 1;
+        }
         const state = enrollment.EnrollmentState{
             .local_membership = local_membership,
             .admission_policy = .{ .allowed_peers = self.config.allowlist },
-            .enrolled_peers = &.{},
+            .enrolled_peers = enrolled_peers_buffer[0..enrolled_count],
         };
         if (!state.refreshRemoteMembership(network_id, self.remote_memberships, membership)) return false;
         self.emit(.{ .topology_change = membership.peer_id });
