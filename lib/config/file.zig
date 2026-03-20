@@ -1,6 +1,10 @@
 const std = @import("std");
 const types = @import("../core/types.zig");
 
+pub const ParseError = error{
+    InvalidConfig,
+};
+
 pub const FileConfig = struct {
     pub const NodeSection = struct {
         name: []const u8 = "",
@@ -38,10 +42,94 @@ pub const FileConfig = struct {
     bootstrap_peers: []const BootstrapPeer = &.{},
     allowed_peers: []const AllowedPeer = &.{},
     policy: PolicySection = .{},
+
+    pub fn deinit(self: *FileConfig, allocator: std.mem.Allocator) void {
+        allocator.free(self.bootstrap_peers);
+        allocator.free(self.allowed_peers);
+        self.* = init(self.raw);
+    }
 };
 
 pub fn init(raw: []const u8) FileConfig {
     return .{ .raw = raw };
+}
+
+const Section = enum {
+    root,
+    node,
+};
+
+pub fn parse(allocator: std.mem.Allocator, raw: []const u8) (ParseError || std.mem.Allocator.Error)!FileConfig {
+    _ = allocator;
+
+    var cfg = init(raw);
+    var section: Section = .root;
+
+    var lines = std.mem.splitScalar(u8, raw, '\n');
+    while (lines.next()) |line| {
+        const trimmed = trimLine(line);
+        if (trimmed.len == 0) continue;
+
+        if (isSectionHeader(trimmed)) {
+            section = parseSection(trimmed) orelse return ParseError.InvalidConfig;
+            continue;
+        }
+
+        const key, const value = parseAssignment(trimmed) orelse return ParseError.InvalidConfig;
+        switch (section) {
+            .node => try applyNodeField(&cfg.node, key, value),
+            .root => return ParseError.InvalidConfig,
+        }
+    }
+
+    return cfg;
+}
+
+fn trimLine(line: []const u8) []const u8 {
+    var parts = std.mem.splitScalar(u8, line, '#');
+    const without_comment = parts.first();
+    return std.mem.trim(u8, without_comment, " \t\r");
+}
+
+fn isSectionHeader(line: []const u8) bool {
+    return line.len >= 3 and line[0] == '[' and line[line.len - 1] == ']';
+}
+
+fn parseSection(line: []const u8) ?Section {
+    if (std.mem.eql(u8, line, "[node]")) return .node;
+    return null;
+}
+
+fn parseAssignment(line: []const u8) ?struct { []const u8, []const u8 } {
+    var parts = std.mem.splitScalar(u8, line, '=');
+    const key = std.mem.trim(u8, parts.next() orelse return null, " \t");
+    const value = std.mem.trim(u8, parts.next() orelse return null, " \t");
+    if (key.len == 0 or value.len == 0 or parts.next() != null) return null;
+    return .{ key, value };
+}
+
+fn applyNodeField(node: *FileConfig.NodeSection, key: []const u8, value: []const u8) ParseError!void {
+    const text = parseString(value) orelse return ParseError.InvalidConfig;
+
+    if (std.mem.eql(u8, key, "name")) {
+        node.name = text;
+        return;
+    }
+    if (std.mem.eql(u8, key, "network_id")) {
+        node.network_id = text;
+        return;
+    }
+    if (std.mem.eql(u8, key, "identity_path")) {
+        node.identity_path = text;
+        return;
+    }
+
+    return ParseError.InvalidConfig;
+}
+
+fn parseString(value: []const u8) ?[]const u8 {
+    if (value.len < 2 or value[0] != '"' or value[value.len - 1] != '"') return null;
+    return value[1 .. value.len - 1];
 }
 
 test "file config module exists" {
@@ -73,4 +161,20 @@ test "file config schema captures top level sections" {
     try std.testing.expectEqual(@as(usize, 1), cfg.allowed_peers.len);
     try std.testing.expect(cfg.policy.strict_allowlist);
     _ = types;
+}
+
+test "parse reads node name network id and identity path" {
+    const raw =
+        \\[node]
+        \\name = "alpha"
+        \\network_id = "home-net"
+        \\identity_path = "/var/lib/libvine/identity"
+    ;
+
+    var cfg = try parse(std.testing.allocator, raw);
+    defer cfg.deinit(std.testing.allocator);
+
+    try std.testing.expectEqualStrings("alpha", cfg.node.name);
+    try std.testing.expectEqualStrings("home-net", cfg.node.network_id);
+    try std.testing.expectEqualStrings("/var/lib/libvine/identity", cfg.node.identity_path);
 }
