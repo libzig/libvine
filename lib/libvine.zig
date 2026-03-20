@@ -10,6 +10,7 @@ pub const data = @import("data/data.zig");
 pub const daemon = @import("daemon/daemon.zig");
 pub const integration = @import("integration/integration.zig");
 pub const linux = @import("linux/linux.zig");
+pub const runtime = @import("runtime/runtime.zig");
 pub const testing = @import("testing/testing.zig");
 
 // Downstream packages such as libboid can use this as the public package
@@ -27,6 +28,7 @@ test {
     _ = daemon;
     _ = integration;
     _ = linux;
+    _ = runtime;
     _ = testing;
     _ = version;
 }
