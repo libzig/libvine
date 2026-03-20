@@ -35,6 +35,7 @@ pub const SessionManager = struct {
         var connected: usize = 0;
         for (self.configured_peers) |peer| {
             const handle = self.mesh.openSession(peer.peer_id) orelse continue;
+            if (!allowPlan(peer, handle.plan)) continue;
             if (self.putSession(.{
                 .peer_id = handle.peer_id,
                 .session_id = handle.session_id,
@@ -79,6 +80,13 @@ pub const SessionManager = struct {
             .direct => .direct,
             .signaling_then_direct => .direct_after_signaling,
             .relay => .relay,
+        };
+    }
+
+    fn allowPlan(peer: ManagedPeer, plan: integration.libmesh_adapter.ReachabilityPlan) bool {
+        return switch (plan.mode()) {
+            .relay => peer.relay_capable,
+            else => true,
         };
     }
 
@@ -255,4 +263,48 @@ test "session manager tracks relay sessions" {
 
     _ = manager.connectConfiguredPeers();
     try @import("std").testing.expectEqual(@as(usize, 1), manager.relaySessionCount());
+}
+
+test "session manager only accepts relay plans for relay-capable peers" {
+    const libmesh = @import("libmesh");
+    const relay_node = libmesh.Foundation.NodeId.fromPublicKey([_]u8{0x78} ** 32);
+    const peer_id = core.types.PeerId.init(relay_node.toBytes());
+    var sessions = [_]core.session_table.ActiveSession{
+        .{
+            .peer_id = core.types.PeerId.init(.{0} ** core.types.peer_id_len),
+            .session_id = .{ .value = 0 },
+            .preference = .direct,
+        },
+        .{
+            .peer_id = core.types.PeerId.init(.{0} ** core.types.peer_id_len),
+            .session_id = .{ .value = 0 },
+            .preference = .direct,
+        },
+    };
+    const mesh = integration.libmesh_adapter.LibmeshAdapter.withReachability(
+        &.{.{
+            .peer_id = peer_id,
+            .node_id = relay_node,
+        }},
+        &.{.{
+            .relay = .{
+                .peer_id = peer_id,
+                .node_id = relay_node,
+            },
+        }},
+    );
+
+    var denied = SessionManager.withMesh(
+        &.{.{ .peer_id = peer_id, .relay_capable = false }},
+        sessions[0..1],
+        mesh,
+    );
+    try @import("std").testing.expectEqual(@as(usize, 0), denied.connectConfiguredPeers());
+
+    var allowed = SessionManager.withMesh(
+        &.{.{ .peer_id = peer_id, .relay_capable = true }},
+        sessions[1..2],
+        mesh,
+    );
+    try @import("std").testing.expectEqual(@as(usize, 1), allowed.connectConfiguredPeers());
 }
