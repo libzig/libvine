@@ -25,7 +25,7 @@ pub fn run(args: []const []const u8, default_config_path: []const u8, paths: Dae
 fn handleRun(args: []const []const u8, default_config_path: []const u8, paths: DaemonCommandPaths) !void {
     const config_path = try parseConfigPath(args, default_config_path);
     var runtime = daemon_runtime.init(paths);
-    runtime.runForeground(config_path);
+    try runtime.runForeground(config_path);
     std.debug.print("daemon running\nconfig_path={s}\n", .{runtime.config_path.?});
 }
 
@@ -163,7 +163,7 @@ test "daemon status reads persisted runtime state" {
         .state_path = state_path,
         .log_path = "/var/log/libvine/vine.log",
     });
-    runtime.runForeground("/etc/libvine/vine.toml");
+    try runtime.runForeground("/etc/libvine/vine.toml");
     try runtime.writeStateFile(std.testing.allocator);
 
     var snapshot = try daemon_runtime.readStateFile(std.testing.allocator, state_path);

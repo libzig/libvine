@@ -18,16 +18,20 @@ pub const Runtime = struct {
     phase: DaemonPhase = .stopped,
     config_path: ?[]const u8 = null,
     pid: ?std.process.Child.Id = null,
+    last_startup_failure: ?StartupStep = null,
+    startup_steps_completed: usize = 0,
 
-    pub fn runForeground(self: *Runtime, config_path: []const u8) void {
+    pub fn runForeground(self: *Runtime, config_path: []const u8) !void {
         self.phase = .starting;
         self.config_path = config_path;
+        try self.runStartupSequence(null);
         self.phase = .running;
     }
 
     pub fn startBackground(self: *Runtime, allocator: std.mem.Allocator, exe_path: []const u8, config_path: []const u8) !std.process.Child.Id {
         self.phase = .starting;
         self.config_path = config_path;
+        try self.runStartupSequence(null);
 
         const argv = try buildBackgroundArgv(allocator, exe_path, config_path);
         defer allocator.free(argv);
@@ -90,12 +94,35 @@ pub const Runtime = struct {
             else => return err,
         };
     }
+
+    pub fn runStartupSequence(self: *Runtime, fail_at: ?StartupStep) StartupError!void {
+        self.last_startup_failure = null;
+        self.startup_steps_completed = 0;
+
+        inline for (std.meta.tags(StartupStep)) |step| {
+            if (fail_at == step) {
+                self.last_startup_failure = step;
+                return StartupError.StartupFailed;
+            }
+            self.startup_steps_completed += 1;
+        }
+    }
 };
 
 pub const Snapshot = struct {
     phase: DaemonPhase,
     config_path: ?[]const u8,
     pid: ?std.process.Child.Id,
+};
+
+pub const StartupStep = enum {
+    load_config,
+    initialize_runtime_state,
+    publish_startup_state,
+};
+
+pub const StartupError = error{
+    StartupFailed,
 };
 
 pub fn init(paths: RuntimePaths) Runtime {
@@ -225,10 +252,11 @@ test "daemon runtime enters running phase in foreground mode" {
         .log_path = "/var/log/libvine/vine.log",
     });
 
-    runtime.runForeground("/etc/libvine/vine.toml");
+    try runtime.runForeground("/etc/libvine/vine.toml");
 
     try std.testing.expectEqual(DaemonPhase.running, runtime.phase);
     try std.testing.expectEqualStrings("/etc/libvine/vine.toml", runtime.config_path.?);
+    try std.testing.expectEqual(@as(usize, 3), runtime.startup_steps_completed);
 }
 
 test "daemon runtime builds background argv from current executable and config" {
@@ -249,7 +277,7 @@ test "daemon runtime stops from running state" {
         .log_path = "/var/log/libvine/vine.log",
     });
 
-    runtime.runForeground("/etc/libvine/vine.toml");
+    try runtime.runForeground("/etc/libvine/vine.toml");
     runtime.stop();
 
     try std.testing.expectEqual(DaemonPhase.stopped, runtime.phase);
@@ -269,7 +297,7 @@ test "daemon runtime writes and reads state snapshots" {
         .state_path = state_path,
         .log_path = "/var/log/libvine/vine.log",
     });
-    runtime.runForeground("/etc/libvine/vine.toml");
+    try runtime.runForeground("/etc/libvine/vine.toml");
     runtime.pid = 4242;
     try runtime.writeStateFile(std.testing.allocator);
 
@@ -312,4 +340,19 @@ test "daemon runtime uses sigterm for clean shutdown requests" {
 test "daemon runtime defines reload and diagnostics signals" {
     try std.testing.expectEqual(std.posix.SIG.HUP, reloadSignal());
     try std.testing.expectEqual(std.posix.SIG.USR1, diagnosticsSignal());
+}
+
+test "daemon runtime reports bounded startup failures by step" {
+    var runtime = init(.{
+        .pidfile_path = "/run/libvine/vine.pid",
+        .state_path = "/run/libvine/state.json",
+        .log_path = "/var/log/libvine/vine.log",
+    });
+
+    try std.testing.expectError(
+        StartupError.StartupFailed,
+        runtime.runStartupSequence(.initialize_runtime_state),
+    );
+    try std.testing.expectEqual(StartupStep.initialize_runtime_state, runtime.last_startup_failure.?);
+    try std.testing.expectEqual(@as(usize, 1), runtime.startup_steps_completed);
 }
