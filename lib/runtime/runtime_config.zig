@@ -9,9 +9,12 @@ pub const RuntimeConfig = struct {
     node_config: api.config.NodeConfig,
     local_membership: core.membership.LocalMembership,
     admission_policy: core.policy.AdmissionPolicy,
+    startup_bootstrap_peers: []const api.config.BootstrapPeer,
 
     pub fn deinit(self: *RuntimeConfig, allocator: std.mem.Allocator) void {
         allocator.free(self.node_config.allowlist);
+        for (self.node_config.bootstrap_peers) |peer| allocator.free(peer.address);
+        allocator.free(self.node_config.bootstrap_peers);
         self.* = undefined;
     }
 };
@@ -32,6 +35,8 @@ pub fn load(allocator: std.mem.Allocator, config_path: []const u8) !RuntimeConfi
     const stored = try identity_store.readFile(allocator, parsed.node.identity_path);
     const allowlist = try loadAllowlist(allocator, parsed.allowed_peers);
     errdefer allocator.free(allowlist);
+    const bootstrap_peers = try loadBootstrapPeers(allocator, parsed.bootstrap_peers);
+    errdefer allocator.free(bootstrap_peers);
 
     return .{
         .node_config = .{
@@ -40,6 +45,7 @@ pub fn load(allocator: std.mem.Allocator, config_path: []const u8) !RuntimeConfi
             .network_id = try core.types.NetworkId.init(parsed.node.network_id),
             .tun = try loadTunConfig(parsed.tun),
             .allowlist = allowlist,
+            .bootstrap_peers = bootstrap_peers,
             .policy = .{
                 .allow_relay = parsed.policy.allow_relay,
                 .allow_signaling_upgrade = parsed.policy.allow_signaling_upgrade,
@@ -59,6 +65,7 @@ pub fn load(allocator: std.mem.Allocator, config_path: []const u8) !RuntimeConfi
         .admission_policy = .{
             .allowed_peers = allowlist,
         },
+        .startup_bootstrap_peers = bootstrap_peers,
     };
 }
 
@@ -83,6 +90,25 @@ fn loadAllowlist(allocator: std.mem.Allocator, allowed_peers: []const file_confi
     const peers = try allocator.alloc(core.types.PeerId, allowed_peers.len);
     for (allowed_peers, 0..) |peer, i| {
         peers[i] = try parsePeerId(peer.peer_id);
+    }
+    return peers;
+}
+
+fn loadBootstrapPeers(allocator: std.mem.Allocator, bootstrap_peers: []const file_config.FileConfig.BootstrapPeer) ![]api.config.BootstrapPeer {
+    const peers = try allocator.alloc(api.config.BootstrapPeer, bootstrap_peers.len);
+    errdefer {
+        for (peers[0..bootstrap_peers.len]) |peer| {
+            if (peer.address.len != 0) allocator.free(peer.address);
+        }
+        allocator.free(peers);
+    }
+
+    for (peers) |*peer| peer.* = .{ .peer_id = core.types.PeerId.init(.{0} ** core.types.peer_id_len), .address = "" };
+    for (bootstrap_peers, 0..) |peer, i| {
+        peers[i] = .{
+            .peer_id = try parsePeerId(peer.peer_id),
+            .address = try allocator.dupe(u8, peer.address),
+        };
     }
     return peers;
 }
@@ -117,6 +143,7 @@ test "runtime config module captures a node config translation target" {
         .admission_policy = .{
             .allowed_peers = &.{},
         },
+        .startup_bootstrap_peers = &.{},
     };
 
     try std.testing.expectEqualStrings("devnet", cfg.node_config.network_id.encode());
@@ -147,6 +174,10 @@ test "runtime config loads node config from persisted config and identity files"
         \\prefix_len = 24
         \\mtu = 1400
         \\
+        \\[[bootstrap_peers]]
+        \\peer_id = "{f}"
+        \\address = "udp://198.51.100.10:4100"
+        \\
         \\[[allowed_peers]]
         \\peer_id = "{f}"
         \\prefix = "10.42.1.0/24"
@@ -157,7 +188,7 @@ test "runtime config loads node config from persisted config and identity files"
         \\allow_relay = true
         \\allow_signaling_upgrade = false
         ,
-        .{ identity_path, stored.bound.peer_id },
+        .{ identity_path, stored.bound.peer_id, stored.bound.peer_id },
     );
     defer std.testing.allocator.free(config_body);
 
@@ -173,5 +204,7 @@ test "runtime config loads node config from persisted config and identity files"
     try std.testing.expect(loaded.local_membership.prefix.contains(core.types.VineAddress.init(.{ 10, 42, 0, 99 })));
     try std.testing.expect(loaded.local_membership.peer_id.eql(loaded.node_config.local_peer_id.?));
     try std.testing.expectEqual(@as(usize, 1), loaded.node_config.allowlist.len);
+    try std.testing.expectEqual(@as(usize, 1), loaded.node_config.bootstrap_peers.len);
+    try std.testing.expectEqualStrings("udp://198.51.100.10:4100", loaded.startup_bootstrap_peers[0].address);
     try std.testing.expect(loaded.admission_policy.allows(stored.bound.peer_id));
 }
