@@ -13,7 +13,10 @@ pub const AdmissionPolicy = struct {
 };
 
 pub const PrefixPolicy = struct {
-    pub fn allows(_: PrefixPolicy, _: membership.PeerMembership) bool {
-        return true;
+    allow_primary_only: bool = true,
+
+    pub fn allows(self: PrefixPolicy, record: membership.PeerMembership) bool {
+        _ = record;
+        return self.allow_primary_only;
     }
 };
