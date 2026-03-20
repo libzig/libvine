@@ -60,6 +60,7 @@ const Section = enum {
     tun,
     bootstrap_peers,
     allowed_peers,
+    policy,
 };
 
 pub fn parse(allocator: std.mem.Allocator, raw: []const u8) (ParseError || std.mem.Allocator.Error)!FileConfig {
@@ -97,6 +98,7 @@ pub fn parse(allocator: std.mem.Allocator, raw: []const u8) (ParseError || std.m
                 if (allowed_peers.items.len == 0) return ParseError.InvalidConfig;
                 try applyAllowedPeerField(&allowed_peers.items[allowed_peers.items.len - 1], key, value);
             },
+            .policy => try applyPolicyField(&cfg.policy, key, value),
             .root => return ParseError.InvalidConfig,
         }
     }
@@ -121,6 +123,7 @@ fn parseSection(line: []const u8) ?Section {
     if (std.mem.eql(u8, line, "[tun]")) return .tun;
     if (std.mem.eql(u8, line, "[[bootstrap_peers]]")) return .bootstrap_peers;
     if (std.mem.eql(u8, line, "[[allowed_peers]]")) return .allowed_peers;
+    if (std.mem.eql(u8, line, "[policy]")) return .policy;
     return null;
 }
 
@@ -200,6 +203,25 @@ fn applyAllowedPeerField(peer: *FileConfig.AllowedPeer, key: []const u8, value: 
     }
     if (std.mem.eql(u8, key, "relay_capable")) {
         peer.relay_capable = parseBool(value) orelse return ParseError.InvalidConfig;
+        return;
+    }
+
+    return ParseError.InvalidConfig;
+}
+
+fn applyPolicyField(policy: *FileConfig.PolicySection, key: []const u8, value: []const u8) ParseError!void {
+    const flag = parseBool(value) orelse return ParseError.InvalidConfig;
+
+    if (std.mem.eql(u8, key, "strict_allowlist")) {
+        policy.strict_allowlist = flag;
+        return;
+    }
+    if (std.mem.eql(u8, key, "allow_relay")) {
+        policy.allow_relay = flag;
+        return;
+    }
+    if (std.mem.eql(u8, key, "allow_signaling_upgrade")) {
+        policy.allow_signaling_upgrade = flag;
         return;
     }
 
@@ -334,4 +356,20 @@ test "parse reads relay capability flags for allowed peers" {
 
     try std.testing.expectEqual(@as(usize, 1), cfg.allowed_peers.len);
     try std.testing.expect(cfg.allowed_peers[0].relay_capable);
+}
+
+test "parse reads policy toggles" {
+    const raw =
+        \\[policy]
+        \\strict_allowlist = true
+        \\allow_relay = false
+        \\allow_signaling_upgrade = false
+    ;
+
+    var cfg = try parse(std.testing.allocator, raw);
+    defer cfg.deinit(std.testing.allocator);
+
+    try std.testing.expect(cfg.policy.strict_allowlist);
+    try std.testing.expect(!cfg.policy.allow_relay);
+    try std.testing.expect(!cfg.policy.allow_signaling_upgrade);
 }
