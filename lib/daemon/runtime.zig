@@ -20,6 +20,8 @@ pub const Runtime = struct {
     pid: ?std.process.Child.Id = null,
     last_startup_failure: ?StartupStep = null,
     startup_steps_completed: usize = 0,
+    last_shutdown_failure: ?ShutdownStep = null,
+    shutdown_steps_completed: usize = 0,
 
     pub fn runForeground(self: *Runtime, config_path: []const u8) !void {
         self.phase = .starting;
@@ -47,8 +49,9 @@ pub const Runtime = struct {
         return child.id;
     }
 
-    pub fn stop(self: *Runtime) void {
+    pub fn stop(self: *Runtime) ShutdownError!void {
         self.phase = .stopping;
+        try self.runShutdownSequence(null);
         self.phase = .stopped;
         self.pid = null;
     }
@@ -107,6 +110,19 @@ pub const Runtime = struct {
             self.startup_steps_completed += 1;
         }
     }
+
+    pub fn runShutdownSequence(self: *Runtime, fail_at: ?ShutdownStep) ShutdownError!void {
+        self.last_shutdown_failure = null;
+        self.shutdown_steps_completed = 0;
+
+        inline for (std.meta.tags(ShutdownStep)) |step| {
+            if (fail_at == step) {
+                self.last_shutdown_failure = step;
+                return ShutdownError.ShutdownFailed;
+            }
+            self.shutdown_steps_completed += 1;
+        }
+    }
 };
 
 pub const Snapshot = struct {
@@ -123,6 +139,16 @@ pub const StartupStep = enum {
 
 pub const StartupError = error{
     StartupFailed,
+};
+
+pub const ShutdownStep = enum {
+    drain_tun,
+    close_sessions,
+    persist_final_state,
+};
+
+pub const ShutdownError = error{
+    ShutdownFailed,
 };
 
 pub fn init(paths: RuntimePaths) Runtime {
@@ -278,9 +304,10 @@ test "daemon runtime stops from running state" {
     });
 
     try runtime.runForeground("/etc/libvine/vine.toml");
-    runtime.stop();
+    try runtime.stop();
 
     try std.testing.expectEqual(DaemonPhase.stopped, runtime.phase);
+    try std.testing.expectEqual(@as(usize, 3), runtime.shutdown_steps_completed);
 }
 
 test "daemon runtime writes and reads state snapshots" {
@@ -355,4 +382,19 @@ test "daemon runtime reports bounded startup failures by step" {
     );
     try std.testing.expectEqual(StartupStep.initialize_runtime_state, runtime.last_startup_failure.?);
     try std.testing.expectEqual(@as(usize, 1), runtime.startup_steps_completed);
+}
+
+test "daemon runtime reports bounded shutdown failures by step" {
+    var runtime = init(.{
+        .pidfile_path = "/run/libvine/vine.pid",
+        .state_path = "/run/libvine/state.json",
+        .log_path = "/var/log/libvine/vine.log",
+    });
+
+    try std.testing.expectError(
+        ShutdownError.ShutdownFailed,
+        runtime.runShutdownSequence(.close_sessions),
+    );
+    try std.testing.expectEqual(ShutdownStep.close_sessions, runtime.last_shutdown_failure.?);
+    try std.testing.expectEqual(@as(usize, 1), runtime.shutdown_steps_completed);
 }

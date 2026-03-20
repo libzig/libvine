@@ -62,7 +62,7 @@ fn handleStop(args: []const []const u8, paths: DaemonCommandPaths) !void {
 
     var runtime = daemon_runtime.init(paths);
     runtime.pid = pid;
-    runtime.stop();
+    try runtime.stop();
     try runtime.removePidFile();
     std.debug.print("daemon stopped\npid={d}\n", .{pid});
 }
