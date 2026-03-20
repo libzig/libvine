@@ -40,6 +40,26 @@ pub const SessionTable = struct {
     }
 
     pub fn promote(self: *SessionTable, replacement: ActiveSession) bool {
+        var preferred_index: ?usize = null;
+        var preferred_preference: ?route_table.RouteEntry.Preference = null;
+
+        for (self.sessions, 0..) |session, index| {
+            if (!session.peer_id.eql(replacement.peer_id)) continue;
+            if (session.preference == .relay) continue;
+
+            if (preferred_index == null or @intFromEnum(session.preference) > @intFromEnum(preferred_preference.?)) {
+                preferred_index = index;
+                preferred_preference = session.preference;
+            }
+        }
+
+        if (preferred_index) |index| {
+            if (@intFromEnum(replacement.preference) >= @intFromEnum(self.sessions[index].preference)) {
+                self.sessions[index] = replacement;
+                return true;
+            }
+        }
+
         for (self.sessions) |*session| {
             if (!session.peer_id.eql(replacement.peer_id)) continue;
             if (@intFromEnum(replacement.preference) > @intFromEnum(session.preference)) {
@@ -57,3 +77,30 @@ pub const SessionTable = struct {
         return null;
     }
 };
+
+test "session table indexes, promotion, and relay fallback work" {
+    var sessions = [_]ActiveSession{
+        .{
+            .peer_id = types.PeerId.init(.{1} ** types.peer_id_len),
+            .session_id = .{ .value = 1 },
+            .preference = .relay,
+        },
+        .{
+            .peer_id = types.PeerId.init(.{1} ** types.peer_id_len),
+            .session_id = .{ .value = 2 },
+            .preference = .direct,
+        },
+    };
+    var table = SessionTable.init(&sessions);
+
+    try @import("std").testing.expectEqual(@as(u64, 1), table.bySessionId(.{ .value = 1 }).?.session_id.value);
+    try @import("std").testing.expectEqual(route_table.RouteEntry.Preference.direct, table.preferredForPeer(types.PeerId.init(.{1} ** types.peer_id_len)).?.preference);
+
+    try @import("std").testing.expect(table.promote(.{
+        .peer_id = types.PeerId.init(.{1} ** types.peer_id_len),
+        .session_id = .{ .value = 3 },
+        .preference = .direct,
+    }));
+    try @import("std").testing.expectEqual(@as(u64, 3), table.preferredForPeer(types.PeerId.init(.{1} ** types.peer_id_len)).?.session_id.value);
+    try @import("std").testing.expectEqual(@as(u64, 1), table.fallbackToRelay(types.PeerId.init(.{1} ** types.peer_id_len)).?.session_id.value);
+}
