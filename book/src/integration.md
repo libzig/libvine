@@ -12,6 +12,9 @@ as an overlay runtime instead of talking to `libmesh`, `libfast`, and Linux TUN 
 - create and run a node with `lib/api/node.zig`
 - use examples in `examples/` as the baseline integration shape
 
+The most complete topology walkthrough in the repo is `examples/multi_node_relay_demo.zig`,
+which models multiple peers plus a relay and shows direct, signaling-assisted, and relay fallback traffic choices.
+
 ## Required Consumer Inputs
 
 A consumer is expected to provide:
