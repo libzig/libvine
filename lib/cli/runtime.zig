@@ -27,6 +27,13 @@ const RouteDiagnostics = struct {
     preference: core.route_table.RouteEntry.Preference,
 };
 
+const SessionDiagnostics = struct {
+    peer_id: core.types.PeerId,
+    session_id: core.types.SessionId,
+    mode: core.route_table.RouteEntry.Preference,
+    relay_capable: bool,
+};
+
 pub fn runUp(args: []const []const u8, default_config_path: []const u8) !void {
     const config_path = try parseConfigPath(args, default_config_path);
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -179,33 +186,63 @@ pub fn runSessions(args: []const []const u8, default_config_path: []const u8) !v
     );
     _ = manager.connectConfiguredPeers();
 
+    const sessions_view = try buildSessionDiagnostics(allocator, managed_peers, manager);
+    defer allocator.free(sessions_view);
     var output = std.ArrayList(u8).empty;
     defer output.deinit(allocator);
-    try renderSessions(output.writer(allocator), managed_peers, manager);
+    try renderSessions(output.writer(allocator), sessions_view);
     std.debug.print("{s}", .{output.items});
 }
 
 fn renderSessions(
     writer: anytype,
-    peers: []const runtime.session_manager.ManagedPeer,
-    manager: runtime.session_manager.SessionManager,
+    sessions: []const SessionDiagnostics,
 ) !void {
     try writer.print(
         "vine sessions\ncount={d}\ndirect={d}\nsignaling={d}\nrelay={d}\n",
         .{
-            peers.len,
-            manager.directSessionCount(),
-            manager.signalingSessionCount(),
-            manager.relaySessionCount(),
+            sessions.len,
+            countSessionsByPreference(sessions, .direct),
+            countSessionsByPreference(sessions, .direct_after_signaling),
+            countSessionsByPreference(sessions, .relay),
         },
     );
-    for (peers) |peer| {
-        const session = manager.preferredSessionForPeer(peer.peer_id) orelse continue;
+    for (sessions) |session| {
         try writer.print(
             "peer={f}\nmode={s}\nsession_id={d}\nrelay_capable={any}\n",
-            .{ peer.peer_id, preferenceLabel(session.preference), session.session_id.value, peer.relay_capable },
+            .{ session.peer_id, preferenceLabel(session.mode), session.session_id.value, session.relay_capable },
         );
     }
+}
+
+fn buildSessionDiagnostics(
+    allocator: std.mem.Allocator,
+    peers: []const runtime.session_manager.ManagedPeer,
+    manager: runtime.session_manager.SessionManager,
+) ![]SessionDiagnostics {
+    var sessions = try std.ArrayList(SessionDiagnostics).initCapacity(allocator, peers.len);
+    defer sessions.deinit(allocator);
+    for (peers) |peer| {
+        const preferred = manager.preferredSessionForPeer(peer.peer_id) orelse continue;
+        try sessions.append(allocator, .{
+            .peer_id = peer.peer_id,
+            .session_id = preferred.session_id,
+            .mode = preferred.preference,
+            .relay_capable = peer.relay_capable,
+        });
+    }
+    return sessions.toOwnedSlice(allocator);
+}
+
+fn countSessionsByPreference(
+    sessions: []const SessionDiagnostics,
+    preference: core.route_table.RouteEntry.Preference,
+) usize {
+    var count: usize = 0;
+    for (sessions) |session| {
+        if (session.mode == preference) count += 1;
+    }
+    return count;
 }
 
 fn buildDiagnosticsSnapshot(
@@ -382,14 +419,34 @@ test "runtime cli renders session state through vine sessions" {
         },
     };
     const manager = runtime.session_manager.SessionManager.init(&peers, &sessions);
+    const session_view = try buildSessionDiagnostics(std.testing.allocator, &peers, manager);
+    defer std.testing.allocator.free(session_view);
 
     var buffer = std.ArrayList(u8).empty;
     defer buffer.deinit(std.testing.allocator);
-    try renderSessions(buffer.writer(std.testing.allocator), &peers, manager);
+    try renderSessions(buffer.writer(std.testing.allocator), session_view);
 
     try std.testing.expect(std.mem.indexOf(u8, buffer.items, "vine sessions") != null);
     try std.testing.expect(std.mem.indexOf(u8, buffer.items, "signaling=1") != null);
     try std.testing.expect(std.mem.indexOf(u8, buffer.items, "relay=1") != null);
+}
+
+test "runtime cli builds session diagnostics from preferred session state" {
+    const peers = [_]runtime.session_manager.ManagedPeer{
+        .{ .peer_id = core.types.PeerId.init(.{0x95} ** core.types.peer_id_len) },
+        .{ .peer_id = core.types.PeerId.init(.{0x96} ** core.types.peer_id_len), .relay_capable = true },
+    };
+    var sessions = [_]core.session_table.ActiveSession{
+        .{ .peer_id = peers[0].peer_id, .session_id = .{ .value = 52 }, .preference = .direct },
+        .{ .peer_id = peers[1].peer_id, .session_id = .{ .value = 53 }, .preference = .relay },
+    };
+    const manager = runtime.session_manager.SessionManager.init(&peers, &sessions);
+    const diagnostics = try buildSessionDiagnostics(std.testing.allocator, &peers, manager);
+    defer std.testing.allocator.free(diagnostics);
+
+    try std.testing.expectEqual(@as(usize, 2), diagnostics.len);
+    try std.testing.expectEqual(@as(u64, 52), diagnostics[0].session_id.value);
+    try std.testing.expect(diagnostics[1].relay_capable);
 }
 
 test "runtime cli builds status diagnostics snapshot" {
