@@ -440,3 +440,58 @@ test "integration direct path succeeds through libmesh adapter and forwarder" {
     try std.testing.expectEqual(@as(u64, 41), forwarder.forwardOutbound(&packet).?.session_id.value);
     try std.testing.expect(forwarder.forwardInbound(peer, &packet));
 }
+
+test "integration signaling assisted path maps into preferred session" {
+    const peer = core.types.PeerId.init(.{0x82} ** core.types.peer_id_len);
+    var routes = [_]core.route_table.RouteEntry{
+        .{
+            .prefix = try core.types.VinePrefix.parse("10.111.0.0/24"),
+            .peer_id = peer,
+            .session_id = core.types.SessionId.init(51),
+            .epoch = core.types.MembershipEpoch.init(1),
+            .preference = .direct_after_signaling,
+        },
+    };
+    var sessions = [_]core.session_table.ActiveSession{
+        .{
+            .peer_id = peer,
+            .session_id = core.types.SessionId.init(51),
+            .preference = .direct_after_signaling,
+        },
+    };
+    var memberships = [_]core.membership.PeerMembership{};
+
+    var node = try Node.init(.{
+        .network_id = try core.types.NetworkId.init("devnet"),
+        .tun = .{
+            .ifname = [_]u8{ 'v', 'n', '9', 0 } ++ ([_]u8{0} ** 12),
+            .local_address = core.types.VineAddress.init(.{ 10, 108, 0, 1 }),
+            .prefix_len = 24,
+        },
+    }, .{
+        .routes = &routes,
+        .sessions = &sessions,
+        .memberships = &memberships,
+    });
+
+    const candidate = integration.libmesh_adapter.CandidatePeer{
+        .peer_id = peer,
+        .node_id = @import("libmesh").Foundation.NodeId.fromPublicKey(peer.bytes),
+    };
+    node.mesh = integration.libmesh_adapter.LibmeshAdapter.withReachability(
+        &.{candidate},
+        &.{.{ .signaling_then_direct = candidate }},
+    );
+
+    const handle = node.mesh.openSession(peer).?;
+    const packet = @import("../testing/fixtures.zig").packet(.{ 10, 108, 0, 1 }, .{ 10, 111, 0, 9 });
+    const forwarder = core.forwarder.Forwarder{
+        .routes = &node.route_table,
+        .sessions = &node.session_table,
+        .tun = &node.tun,
+        .local_peer_id = node.local_peer_id,
+    };
+
+    try std.testing.expectEqual(integration.libmesh_adapter.ReachabilityPlan.Mode.signaling_then_direct, handle.plan.mode());
+    try std.testing.expectEqual(@as(u64, 51), forwarder.forwardOutbound(&packet).?.session_id.value);
+}
