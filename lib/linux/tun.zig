@@ -18,6 +18,9 @@ pub const IfReq = struct {
     flags: u16 = 0,
 };
 
+pub const IFF_TUN: u16 = 0x0001;
+pub const IFF_NO_PI: u16 = 0x1000;
+
 pub fn mapOpenError(errno: u16) VineError {
     return switch (errno) {
         2 => VineError.LinuxUnavailable,
