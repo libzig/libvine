@@ -1,11 +1,12 @@
 const std = @import("std");
+const VineError = @import("../common/error.zig").VineError;
 
 pub const NetworkId = struct {
     bytes: [64]u8 = [_]u8{0} ** 64,
     len: u8 = 0,
 
-    pub fn init(value: []const u8) !NetworkId {
-        if (value.len == 0 or value.len > 64) return error.InvalidNetworkId;
+    pub fn init(value: []const u8) VineError!NetworkId {
+        if (value.len == 0 or value.len > 64) return VineError.InvalidNetworkId;
 
         var id = NetworkId{};
         @memcpy(id.bytes[0..value.len], value);
@@ -13,7 +14,7 @@ pub const NetworkId = struct {
         return id;
     }
 
-    pub fn decode(value: []const u8) !NetworkId {
+    pub fn decode(value: []const u8) VineError!NetworkId {
         return init(value);
     }
 
@@ -33,18 +34,18 @@ pub const VineAddress = struct {
         return .{ .octets = octets };
     }
 
-    pub fn parse(text: []const u8) !VineAddress {
+    pub fn parse(text: []const u8) VineError!VineAddress {
         var iter = std.mem.splitScalar(u8, text, '.');
         var octets: [4]u8 = undefined;
         var index: usize = 0;
 
         while (iter.next()) |part| {
-            if (index >= 4 or part.len == 0) return error.InvalidVineAddress;
-            octets[index] = try std.fmt.parseInt(u8, part, 10);
+            if (index >= 4 or part.len == 0) return VineError.InvalidVineAddress;
+            octets[index] = std.fmt.parseInt(u8, part, 10) catch return VineError.InvalidVineAddress;
             index += 1;
         }
 
-        if (index != 4) return error.InvalidVineAddress;
+        if (index != 4) return VineError.InvalidVineAddress;
         return init(octets);
     }
 
@@ -71,23 +72,23 @@ pub const VinePrefix = struct {
     network: VineAddress,
     prefix_len: u8,
 
-    pub fn init(address: VineAddress, prefix_len: u8) !VinePrefix {
-        if (prefix_len > 32) return error.InvalidVinePrefix;
+    pub fn init(address: VineAddress, prefix_len: u8) VineError!VinePrefix {
+        if (prefix_len > 32) return VineError.InvalidVinePrefix;
         return .{
             .network = masked(address, prefix_len),
             .prefix_len = prefix_len,
         };
     }
 
-    pub fn parse(text: []const u8) !VinePrefix {
+    pub fn parse(text: []const u8) VineError!VinePrefix {
         var iter = std.mem.splitScalar(u8, text, '/');
-        const address_text = iter.next() orelse return error.InvalidVinePrefix;
-        const prefix_text = iter.next() orelse return error.InvalidVinePrefix;
-        if (iter.next() != null) return error.InvalidVinePrefix;
+        const address_text = iter.next() orelse return VineError.InvalidVinePrefix;
+        const prefix_text = iter.next() orelse return VineError.InvalidVinePrefix;
+        if (iter.next() != null) return VineError.InvalidVinePrefix;
 
         return init(
             try VineAddress.parse(address_text),
-            try std.fmt.parseInt(u8, prefix_text, 10),
+            std.fmt.parseInt(u8, prefix_text, 10) catch return VineError.InvalidVinePrefix,
         );
     }
 
@@ -126,8 +127,8 @@ pub const PeerId = struct {
         return .{ .bytes = bytes };
     }
 
-    pub fn decode(bytes: []const u8) !PeerId {
-        if (bytes.len != 32) return error.InvalidPeerId;
+    pub fn decode(bytes: []const u8) VineError!PeerId {
+        if (bytes.len != 32) return VineError.InvalidPeerId;
 
         var out: [32]u8 = undefined;
         @memcpy(&out, bytes);
@@ -159,8 +160,8 @@ pub const MembershipEpoch = struct {
         return .{ .value = value };
     }
 
-    pub fn next(self: MembershipEpoch) !MembershipEpoch {
-        if (self.value == std.math.maxInt(u64)) return error.InvalidMembershipEpoch;
+    pub fn next(self: MembershipEpoch) VineError!MembershipEpoch {
+        if (self.value == std.math.maxInt(u64)) return VineError.InvalidMembershipEpoch;
         return init(self.value + 1);
     }
 
@@ -176,8 +177,8 @@ pub const SessionId = struct {
         return .{ .value = value };
     }
 
-    pub fn next(self: SessionId) !SessionId {
-        if (self.value == std.math.maxInt(u64)) return error.InvalidSessionId;
+    pub fn next(self: SessionId) VineError!SessionId {
+        if (self.value == std.math.maxInt(u64)) return VineError.InvalidSessionId;
         return init(self.value + 1);
     }
 
