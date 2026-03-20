@@ -7,6 +7,7 @@ pub const config = @import("config/config.zig");
 pub const control = @import("control/control.zig");
 pub const core = @import("core/core.zig");
 pub const data = @import("data/data.zig");
+pub const daemon = @import("daemon/daemon.zig");
 pub const integration = @import("integration/integration.zig");
 pub const linux = @import("linux/linux.zig");
 pub const testing = @import("testing/testing.zig");
@@ -23,6 +24,7 @@ test {
     _ = control;
     _ = core;
     _ = data;
+    _ = daemon;
     _ = integration;
     _ = linux;
     _ = testing;
