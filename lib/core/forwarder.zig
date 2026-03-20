@@ -27,4 +27,8 @@ pub const Forwarder = struct {
         const route = self.lookupDestination(packet) orelse return null;
         return self.lookupSessionForRoute(route);
     }
+
+    pub fn forwardInbound(self: Forwarder, packet: []const u8) void {
+        self.tun.writePacket(packet);
+    }
 };
