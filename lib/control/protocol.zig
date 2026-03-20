@@ -13,3 +13,9 @@ pub const Hello = struct {
     version_minor: u16,
     capabilities: CapabilityFlags = .{},
 };
+
+pub const JoinAnnounce = struct {
+    network_id: types.NetworkId,
+    prefix: types.VinePrefix,
+    epoch: types.MembershipEpoch,
+};
