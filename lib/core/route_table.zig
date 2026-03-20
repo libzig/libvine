@@ -2,10 +2,17 @@ const types = @import("types.zig");
 const VineError = @import("../common/error.zig").VineError;
 
 pub const RouteEntry = struct {
+    pub const Preference = enum(u8) {
+        relay = 1,
+        direct_after_signaling = 2,
+        direct = 3,
+    };
+
     prefix: types.VinePrefix,
     peer_id: types.PeerId,
     session_id: ?types.SessionId = null,
     epoch: types.MembershipEpoch,
+    preference: Preference = .relay,
 };
 
 pub const RouteTable = struct {
@@ -28,10 +35,15 @@ pub const RouteTable = struct {
     }
 
     pub fn lookup(self: RouteTable, address: types.VineAddress) ?RouteEntry {
+        var selected: ?RouteEntry = null;
         for (self.entries) |entry| {
-            if (entry.prefix.contains(address)) return entry;
+            if (!entry.prefix.contains(address)) continue;
+
+            if (selected == null or @intFromEnum(entry.preference) > @intFromEnum(selected.?.preference)) {
+                selected = entry;
+            }
         }
-        return null;
+        return selected;
     }
 
     pub fn withdraw(self: *RouteTable, prefix: types.VinePrefix) bool {
