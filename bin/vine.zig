@@ -4,6 +4,9 @@ pub const default_config_dir = "/etc/libvine";
 pub const default_config_path = "/etc/libvine/vine.toml";
 pub const default_state_dir = "/var/lib/libvine";
 pub const default_identity_path = "/var/lib/libvine/identity";
+pub const default_pidfile_path = "/run/libvine/vine.pid";
+pub const default_runtime_state_path = "/run/libvine/state.json";
+pub const default_log_path = "/var/log/libvine/vine.log";
 
 const Command = enum {
     identity,
@@ -97,5 +100,16 @@ fn printHelp() !void {
         \\DEFAULT IDENTITY:
         \\    {s}
         \\
-    , .{ default_config_path, default_identity_path });
+        \\DEFAULT DAEMON FILES:
+        \\    pidfile: {s}
+        \\    state:   {s}
+        \\    log:     {s}
+        \\
+    , .{
+        default_config_path,
+        default_identity_path,
+        default_pidfile_path,
+        default_runtime_state_path,
+        default_log_path,
+    });
 }
