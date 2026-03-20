@@ -1,6 +1,7 @@
 const std = @import("std");
 
 pub const api = @import("api/api.zig");
+pub const cli = @import("cli/cli.zig");
 pub const common = @import("common/common.zig");
 pub const control = @import("control/control.zig");
 pub const core = @import("core/core.zig");
@@ -15,6 +16,7 @@ pub const version = std.SemanticVersion.parse("0.0.1") catch unreachable;
 
 test {
     _ = api;
+    _ = cli;
     _ = common;
     _ = control;
     _ = core;
