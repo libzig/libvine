@@ -151,3 +151,20 @@ pub const PeerId = struct {
         try writer.print("{}", .{std.fmt.fmtSliceHexLower(&self.bytes)});
     }
 };
+
+pub const MembershipEpoch = struct {
+    value: u64,
+
+    pub fn init(value: u64) MembershipEpoch {
+        return .{ .value = value };
+    }
+
+    pub fn next(self: MembershipEpoch) !MembershipEpoch {
+        if (self.value == std.math.maxInt(u64)) return error.InvalidMembershipEpoch;
+        return init(self.value + 1);
+    }
+
+    pub fn eql(self: MembershipEpoch, other: MembershipEpoch) bool {
+        return self.value == other.value;
+    }
+};
