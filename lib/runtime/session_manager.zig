@@ -50,6 +50,10 @@ pub const SessionManager = struct {
         return countByPreference(self, .direct);
     }
 
+    pub fn signalingSessionCount(self: SessionManager) usize {
+        return countByPreference(self, .direct_after_signaling);
+    }
+
     fn putSession(self: *SessionManager, session: core.session_table.ActiveSession) bool {
         for (self.sessions.sessions) |*existing| {
             if (existing.peer_id.eql(session.peer_id) and existing.preference == session.preference) {
@@ -178,4 +182,38 @@ test "session manager tracks direct sessions" {
 
     _ = manager.connectConfiguredPeers();
     try @import("std").testing.expectEqual(@as(usize, 1), manager.directSessionCount());
+}
+
+test "session manager tracks signaling-assisted sessions" {
+    const libmesh = @import("libmesh");
+    const signaling_node = libmesh.Foundation.NodeId.fromPublicKey([_]u8{0x76} ** 32);
+    const signaling_peer = ManagedPeer{
+        .peer_id = core.types.PeerId.init(signaling_node.toBytes()),
+    };
+    var sessions = [_]core.session_table.ActiveSession{
+        .{
+            .peer_id = core.types.PeerId.init(.{0} ** core.types.peer_id_len),
+            .session_id = .{ .value = 0 },
+            .preference = .relay,
+        },
+    };
+    var manager = SessionManager.withMesh(
+        &.{signaling_peer},
+        &sessions,
+        integration.libmesh_adapter.LibmeshAdapter.withReachability(
+            &.{.{
+                .peer_id = signaling_peer.peer_id,
+                .node_id = signaling_node,
+            }},
+            &.{.{
+                .signaling_then_direct = .{
+                    .peer_id = signaling_peer.peer_id,
+                    .node_id = signaling_node,
+                },
+            }},
+        ),
+    );
+
+    _ = manager.connectConfiguredPeers();
+    try @import("std").testing.expectEqual(@as(usize, 1), manager.signalingSessionCount());
 }
