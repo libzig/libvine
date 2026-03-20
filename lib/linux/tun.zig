@@ -23,6 +23,12 @@ pub const TunDevice = struct {
         self.ifname = request.name;
     }
 
+    pub fn close(self: *TunDevice) void {
+        self.fd = -1;
+        self.rx_buffer = &.{};
+        self.tx_buffer = &.{};
+    }
+
     pub fn applyConfig(self: *TunDevice, config: TunConfig) void {
         self.ifname = config.ifname;
         self.config = config;
@@ -90,4 +96,21 @@ test "tun read and write buffers are testable" {
 
     device.writePacket(&packet);
     try @import("std").testing.expectEqualSlices(u8, &packet, device.tx_buffer);
+}
+
+test "tun handles short reads teardown and reopen cycles" {
+    var device = try TunDevice.open();
+    const short_packet = [_]u8{ 0x45, 0x00, 0x00, 0x14 };
+    device.loadReadBuffer(&short_packet);
+    try @import("std").testing.expectEqualSlices(u8, &short_packet, device.readPacket().?);
+
+    device.close();
+    try @import("std").testing.expectEqual(@as(i32, -1), device.fd);
+    try @import("std").testing.expect(device.readPacket() == null);
+
+    device = try TunDevice.open();
+    try @import("std").testing.expectEqual(@as(i32, 1), device.fd);
+    device.close();
+    device = try TunDevice.open();
+    try @import("std").testing.expectEqual(@as(i32, 1), device.fd);
 }
