@@ -142,13 +142,17 @@ pub const Node = struct {
     }
 
     pub fn refreshRemoteMembership(self: *Node, membership: core.membership.PeerMembership) bool {
+        return self.refreshRemoteMembershipForNetwork(self.config.network_id, membership);
+    }
+
+    pub fn refreshRemoteMembershipForNetwork(self: *Node, network_id: core.types.NetworkId, membership: core.membership.PeerMembership) bool {
         const local_membership = self.local_membership orelse return false;
         const state = enrollment.EnrollmentState{
             .local_membership = local_membership,
             .admission_policy = .{ .allowed_peers = self.config.allowlist },
             .enrolled_peers = &.{},
         };
-        if (!state.refreshRemoteMembership(self.remote_memberships, membership)) return false;
+        if (!state.refreshRemoteMembership(network_id, self.remote_memberships, membership)) return false;
         self.emit(.{ .topology_change = membership.peer_id });
         return true;
     }

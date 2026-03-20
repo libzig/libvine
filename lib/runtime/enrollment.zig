@@ -29,10 +29,11 @@ pub const EnrollmentState = struct {
 
     pub fn refreshRemoteMembership(
         self: EnrollmentState,
+        network_id: core.types.NetworkId,
         memberships: []core.membership.PeerMembership,
         record: core.membership.PeerMembership,
     ) bool {
-        _ = self;
+        if (!self.local_membership.network_id.eql(network_id)) return false;
         for (memberships) |*existing| {
             if (existing.peer_id.eql(record.peer_id)) {
                 existing.* = record;
@@ -168,7 +169,7 @@ test "enrollment state refreshes remote memberships from control plane updates" 
         .enrolled_peers = &.{},
     };
 
-    try std.testing.expect(state.refreshRemoteMembership(&memberships, .{
+    try std.testing.expect(state.refreshRemoteMembership(try core.types.NetworkId.init("devnet"), &memberships, .{
         .peer_id = peer_a,
         .prefix = try core.types.VinePrefix.parse("10.42.1.0/24"),
         .epoch = core.types.MembershipEpoch.init(2),
@@ -176,13 +177,40 @@ test "enrollment state refreshes remote memberships from control plane updates" 
     }));
     try std.testing.expectEqual(@as(u64, 2), memberships[0].epoch.value);
 
-    try std.testing.expect(state.refreshRemoteMembership(&memberships, .{
+    try std.testing.expect(state.refreshRemoteMembership(try core.types.NetworkId.init("devnet"), &memberships, .{
         .peer_id = peer_b,
         .prefix = try core.types.VinePrefix.parse("10.42.2.0/24"),
         .epoch = core.types.MembershipEpoch.init(1),
         .announced_at_ms = 3,
     }));
     try std.testing.expect(memberships[1].peer_id.eql(peer_b));
+}
+
+test "enrollment state rejects peers from the wrong network id" {
+    const peer = core.types.PeerId.init(.{0x11} ** core.types.peer_id_len);
+    var memberships = [_]core.membership.PeerMembership{std.mem.zeroes(core.membership.PeerMembership)};
+    const state = EnrollmentState{
+        .local_membership = .{
+            .network_id = try core.types.NetworkId.init("devnet"),
+            .peer_id = peer,
+            .prefix = try core.types.VinePrefix.parse("10.42.0.0/24"),
+            .epoch = core.types.MembershipEpoch.init(1),
+            .attached_at_ms = 0,
+        },
+        .admission_policy = .{ .allowed_peers = &.{peer} },
+        .enrolled_peers = &.{},
+    };
+
+    try std.testing.expect(!state.refreshRemoteMembership(
+        try core.types.NetworkId.init("othernet"),
+        &memberships,
+        .{
+            .peer_id = peer,
+            .prefix = try core.types.VinePrefix.parse("10.42.1.0/24"),
+            .epoch = core.types.MembershipEpoch.init(1),
+            .announced_at_ms = 1,
+        },
+    ));
 }
 
 test "enrollment state withdraws remote membership cleanly" {
