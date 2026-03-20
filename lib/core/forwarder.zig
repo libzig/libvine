@@ -18,4 +18,8 @@ pub const Forwarder = struct {
         });
         return self.routes.lookup(destination);
     }
+
+    pub fn lookupSessionForRoute(self: Forwarder, route: route_table.RouteEntry) ?session_table.ActiveSession {
+        return self.sessions.preferredForPeer(route.peer_id);
+    }
 };
