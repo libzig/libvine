@@ -8,6 +8,12 @@ const linux = @import("../linux/linux.zig");
 pub const RuntimeConfig = struct {
     node_config: api.config.NodeConfig,
     local_membership: core.membership.LocalMembership,
+    admission_policy: core.policy.AdmissionPolicy,
+
+    pub fn deinit(self: *RuntimeConfig, allocator: std.mem.Allocator) void {
+        allocator.free(self.node_config.allowlist);
+        self.* = undefined;
+    }
 };
 
 pub fn load(allocator: std.mem.Allocator, config_path: []const u8) !RuntimeConfig {
@@ -24,6 +30,8 @@ pub fn load(allocator: std.mem.Allocator, config_path: []const u8) !RuntimeConfi
     defer parsed.deinit(allocator);
 
     const stored = try identity_store.readFile(allocator, parsed.node.identity_path);
+    const allowlist = try loadAllowlist(allocator, parsed.allowed_peers);
+    errdefer allocator.free(allowlist);
 
     return .{
         .node_config = .{
@@ -31,6 +39,7 @@ pub fn load(allocator: std.mem.Allocator, config_path: []const u8) !RuntimeConfi
             .local_peer_id = stored.bound.peer_id,
             .network_id = try core.types.NetworkId.init(parsed.node.network_id),
             .tun = try loadTunConfig(parsed.tun),
+            .allowlist = allowlist,
             .policy = .{
                 .allow_relay = parsed.policy.allow_relay,
                 .allow_signaling_upgrade = parsed.policy.allow_signaling_upgrade,
@@ -46,6 +55,9 @@ pub fn load(allocator: std.mem.Allocator, config_path: []const u8) !RuntimeConfi
             ),
             .epoch = core.types.MembershipEpoch.init(1),
             .attached_at_ms = 0,
+        },
+        .admission_policy = .{
+            .allowed_peers = allowlist,
         },
     };
 }
@@ -67,6 +79,24 @@ fn parseIfName(name: []const u8) ![16]u8 {
     return ifname;
 }
 
+fn loadAllowlist(allocator: std.mem.Allocator, allowed_peers: []const file_config.FileConfig.AllowedPeer) ![]core.types.PeerId {
+    const peers = try allocator.alloc(core.types.PeerId, allowed_peers.len);
+    for (allowed_peers, 0..) |peer, i| {
+        peers[i] = try parsePeerId(peer.peer_id);
+    }
+    return peers;
+}
+
+fn parsePeerId(text: []const u8) !core.types.PeerId {
+    if (text.len != core.types.peer_id_len * 2) return error.InvalidConfig;
+
+    var bytes: [core.types.peer_id_len]u8 = undefined;
+    for (0..core.types.peer_id_len) |i| {
+        bytes[i] = std.fmt.parseInt(u8, text[i * 2 .. i * 2 + 2], 16) catch return error.InvalidConfig;
+    }
+    return core.types.PeerId.init(bytes);
+}
+
 test "runtime config module captures a node config translation target" {
     const cfg = RuntimeConfig{
         .node_config = .{
@@ -84,6 +114,9 @@ test "runtime config module captures a node config translation target" {
             .epoch = @import("../core/types.zig").MembershipEpoch.init(1),
             .attached_at_ms = 0,
         },
+        .admission_policy = .{
+            .allowed_peers = &.{},
+        },
     };
 
     try std.testing.expectEqualStrings("devnet", cfg.node_config.network_id.encode());
@@ -97,7 +130,7 @@ test "runtime config loads node config from persisted config and identity files"
     defer std.testing.allocator.free(root);
     const identity_path = try std.fmt.allocPrint(std.testing.allocator, "{s}/identity", .{root});
     defer std.testing.allocator.free(identity_path);
-    _ = try identity_store.generateAndWrite(identity_path);
+    const stored = try identity_store.generateAndWrite(identity_path);
 
     const config_path = try std.fmt.allocPrint(std.testing.allocator, "{s}/vine.toml", .{root});
     defer std.testing.allocator.free(config_path);
@@ -114,18 +147,24 @@ test "runtime config loads node config from persisted config and identity files"
         \\prefix_len = 24
         \\mtu = 1400
         \\
+        \\[[allowed_peers]]
+        \\peer_id = "{f}"
+        \\prefix = "10.42.1.0/24"
+        \\relay_capable = false
+        \\
         \\[policy]
         \\strict_allowlist = true
         \\allow_relay = true
         \\allow_signaling_upgrade = false
         ,
-        .{identity_path},
+        .{ identity_path, stored.bound.peer_id },
     );
     defer std.testing.allocator.free(config_body);
 
     try tmp.dir.writeFile(.{ .sub_path = "vine.toml", .data = config_body });
 
-    const loaded = try load(std.testing.allocator, config_path);
+    var loaded = try load(std.testing.allocator, config_path);
+    defer loaded.deinit(std.testing.allocator);
     try std.testing.expectEqualStrings("home-net", loaded.node_config.network_id.encode());
     try std.testing.expect(loaded.node_config.local_peer_id != null);
     try std.testing.expectEqual(@as(u8, 24), loaded.node_config.tun.prefix_len);
@@ -133,4 +172,6 @@ test "runtime config loads node config from persisted config and identity files"
     try std.testing.expectEqual(@as(u8, 'v'), loaded.node_config.tun.ifname[0]);
     try std.testing.expect(loaded.local_membership.prefix.contains(core.types.VineAddress.init(.{ 10, 42, 0, 99 })));
     try std.testing.expect(loaded.local_membership.peer_id.eql(loaded.node_config.local_peer_id.?));
+    try std.testing.expectEqual(@as(usize, 1), loaded.node_config.allowlist.len);
+    try std.testing.expect(loaded.admission_policy.allows(stored.bound.peer_id));
 }
