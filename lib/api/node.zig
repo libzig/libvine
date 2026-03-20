@@ -142,14 +142,15 @@ pub const Node = struct {
     }
 
     pub fn refreshRemoteMembership(self: *Node, membership: core.membership.PeerMembership) bool {
-        for (self.remote_memberships) |*existing| {
-            if (existing.peer_id.eql(membership.peer_id)) {
-                existing.* = membership;
-                self.emit(.{ .topology_change = membership.peer_id });
-                return true;
-            }
-        }
-        return false;
+        const local_membership = self.local_membership orelse return false;
+        const state = enrollment.EnrollmentState{
+            .local_membership = local_membership,
+            .admission_policy = .{ .allowed_peers = self.config.allowlist },
+            .enrolled_peers = &.{},
+        };
+        if (!state.refreshRemoteMembership(self.remote_memberships, membership)) return false;
+        self.emit(.{ .topology_change = membership.peer_id });
+        return true;
     }
 
     pub fn withdrawRemoteMembership(self: *Node, peer_id: core.types.PeerId) bool {

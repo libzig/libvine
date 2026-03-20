@@ -26,6 +26,27 @@ pub const EnrollmentState = struct {
     pub fn advertiseLocalMembership(self: EnrollmentState) core.membership.LocalMembership {
         return self.local_membership;
     }
+
+    pub fn refreshRemoteMembership(
+        self: EnrollmentState,
+        memberships: []core.membership.PeerMembership,
+        record: core.membership.PeerMembership,
+    ) bool {
+        _ = self;
+        for (memberships) |*existing| {
+            if (existing.peer_id.eql(record.peer_id)) {
+                existing.* = record;
+                return true;
+            }
+        }
+        for (memberships) |*existing| {
+            if (existing.epoch.value == 0 and existing.announced_at_ms == 0) {
+                existing.* = record;
+                return true;
+            }
+        }
+        return false;
+    }
 };
 
 test "enrollment state captures local membership and admission policy" {
@@ -110,4 +131,45 @@ test "enrollment state advertises local membership on startup" {
     const advertised = state.advertiseLocalMembership();
     try std.testing.expect(advertised.peer_id.eql(peer));
     try std.testing.expect(advertised.prefix.contains(core.types.VineAddress.init(.{ 10, 42, 0, 9 })));
+}
+
+test "enrollment state refreshes remote memberships from control plane updates" {
+    const peer_a = core.types.PeerId.init(.{0x11} ** core.types.peer_id_len);
+    const peer_b = core.types.PeerId.init(.{0x22} ** core.types.peer_id_len);
+    var memberships = [_]core.membership.PeerMembership{
+        .{
+            .peer_id = peer_a,
+            .prefix = try core.types.VinePrefix.parse("10.42.1.0/24"),
+            .epoch = core.types.MembershipEpoch.init(1),
+            .announced_at_ms = 1,
+        },
+        std.mem.zeroes(core.membership.PeerMembership),
+    };
+    const state = EnrollmentState{
+        .local_membership = .{
+            .network_id = try core.types.NetworkId.init("devnet"),
+            .peer_id = peer_a,
+            .prefix = try core.types.VinePrefix.parse("10.42.0.0/24"),
+            .epoch = core.types.MembershipEpoch.init(1),
+            .attached_at_ms = 0,
+        },
+        .admission_policy = .{ .allowed_peers = &.{ peer_a, peer_b } },
+        .enrolled_peers = &.{},
+    };
+
+    try std.testing.expect(state.refreshRemoteMembership(&memberships, .{
+        .peer_id = peer_a,
+        .prefix = try core.types.VinePrefix.parse("10.42.1.0/24"),
+        .epoch = core.types.MembershipEpoch.init(2),
+        .announced_at_ms = 2,
+    }));
+    try std.testing.expectEqual(@as(u64, 2), memberships[0].epoch.value);
+
+    try std.testing.expect(state.refreshRemoteMembership(&memberships, .{
+        .peer_id = peer_b,
+        .prefix = try core.types.VinePrefix.parse("10.42.2.0/24"),
+        .epoch = core.types.MembershipEpoch.init(1),
+        .announced_at_ms = 3,
+    }));
+    try std.testing.expect(memberships[1].peer_id.eql(peer_b));
 }
