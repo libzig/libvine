@@ -7,6 +7,7 @@
 - [Daemon](./daemon.md)
 - [Runtime](./runtime.md)
 - [Enrollment](./enrollment.md)
+- [Peers and Sessions](./peers-and-sessions.md)
 - [Operations](./operations.md)
 - [Architecture](./architecture.md)
 - [MVP](./mvp.md)
