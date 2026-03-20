@@ -5,6 +5,7 @@ const std = @import("std");
 pub const protocol_version_major: u16 = 0;
 pub const protocol_version_minor: u16 = 1;
 pub const max_message_len: usize = types.max_control_payload_len;
+pub const max_setup_metadata_len: usize = 512;
 
 pub const MessageTag = enum(u8) {
     hello = 1,
@@ -194,9 +195,28 @@ pub fn decode(data: []const u8) VineError!Message {
     return message;
 }
 
+pub fn fitsSetupMetadata(message: Message) bool {
+    return switch (message) {
+        .hello, .join_announce => encodedLen(message) <= max_setup_metadata_len,
+        else => false,
+    };
+}
+
 fn appendNetworkId(bytes: *std.ArrayList(u8), allocator: std.mem.Allocator, network_id: types.NetworkId) VineError!void {
     bytes.append(allocator, @intCast(network_id.encode().len)) catch return VineError.MessageTooLarge;
     bytes.appendSlice(allocator, network_id.encode()) catch return VineError.MessageTooLarge;
+}
+
+fn encodedLen(message: Message) usize {
+    return switch (message) {
+        .hello => |m| 1 + 2 + 2 + 1 + m.network_id.encode().len + 1 + 2 + 2,
+        .join_announce => |m| 1 + 2 + 2 + 1 + m.network_id.encode().len + 5 + 8,
+        .route_update => |m| 1 + 2 + 2 + 1 + m.network_id.encode().len + types.peer_id_len + 5 + 8,
+        .route_withdraw => |m| 1 + 2 + 2 + 1 + m.network_id.encode().len + types.peer_id_len + 5 + 8,
+        .keepalive => |m| 1 + 2 + 2 + 1 + m.network_id.encode().len + 8 + 8,
+        .diagnostic_ping => |m| 1 + 2 + 2 + 1 + m.network_id.encode().len + 8 + 8,
+        .diagnostic_pong => |m| 1 + 2 + 2 + 1 + m.network_id.encode().len + 8 + 8,
+    };
 }
 
 fn appendPeerId(bytes: *std.ArrayList(u8), allocator: std.mem.Allocator, peer_id: types.PeerId) VineError!void {
