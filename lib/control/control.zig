@@ -1,1 +1,5 @@
-pub const placeholder = struct {};
+pub const protocol = @import("protocol.zig");
+
+test {
+    _ = protocol;
+}
