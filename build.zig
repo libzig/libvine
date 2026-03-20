@@ -56,6 +56,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+    vine_cli.root_module.addImport("libvine", libvine_export);
     b.installArtifact(vine_cli);
 
     const vine_step = b.step("vine", "Build the vine binary");

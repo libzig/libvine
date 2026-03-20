@@ -1,4 +1,5 @@
 const std = @import("std");
+const libvine = @import("libvine");
 const version = "0.0.1";
 pub const default_config_dir = "/etc/libvine";
 pub const default_config_path = "/etc/libvine/vine.toml";
@@ -68,9 +69,8 @@ fn parseCommand(arg: []const u8) ?Command {
 }
 
 fn dispatch(command: Command, args: []const []const u8) !void {
-    _ = args;
     switch (command) {
-        .identity => std.debug.print("vine identity: not implemented yet\n", .{}),
+        .identity => try libvine.cli.identity.run(args, default_identity_path),
         .config => std.debug.print("vine config: not implemented yet\n", .{}),
         .daemon => std.debug.print("vine daemon: not implemented yet\n", .{}),
         .status => std.debug.print("vine status: not implemented yet\n", .{}),

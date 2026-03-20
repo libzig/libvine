@@ -11,6 +11,12 @@ pub const StoredIdentity = struct {
     bound: identity_adapter.BoundIdentity,
 };
 
+pub fn generate() !StoredIdentity {
+    var seed: [32]u8 = undefined;
+    std.crypto.random.bytes(&seed);
+    return fromSeed(seed);
+}
+
 pub fn fromSeed(seed: [32]u8) !StoredIdentity {
     const key_pair = try libself.identity.KeyPair.fromSeed(seed);
     return .{
@@ -58,6 +64,27 @@ pub fn decode(data: []const u8) !StoredIdentity {
     return fromSeed(maybe_seed.?);
 }
 
+pub fn writeFile(path: []const u8, stored: StoredIdentity) !void {
+    const allocator = std.heap.page_allocator;
+    const encoded = try encode(allocator, stored);
+    defer allocator.free(encoded);
+
+    try ensureParentDir(path);
+    const file = if (std.fs.path.isAbsolute(path))
+        try std.fs.createFileAbsolute(path, .{ .truncate = true, .mode = expected_file_mode })
+    else
+        try std.fs.cwd().createFile(path, .{ .truncate = true, .mode = expected_file_mode });
+    defer file.close();
+
+    try file.writeAll(encoded);
+}
+
+pub fn generateAndWrite(path: []const u8) !StoredIdentity {
+    const stored = try generate();
+    try writeFile(path, stored);
+    return stored;
+}
+
 fn parseHex32(text: []const u8) ![32]u8 {
     if (text.len != 64) return error.InvalidIdentityFile;
 
@@ -66,6 +93,19 @@ fn parseHex32(text: []const u8) ![32]u8 {
         bytes[i] = std.fmt.parseInt(u8, text[i * 2 .. i * 2 + 2], 16) catch return error.InvalidIdentityFile;
     }
     return bytes;
+}
+
+fn ensureParentDir(path: []const u8) !void {
+    const dirname = std.fs.path.dirname(path) orelse return;
+    if (dirname.len == 0) return;
+
+    if (std.fs.path.isAbsolute(path)) {
+        var root = try std.fs.openDirAbsolute("/", .{});
+        defer root.close();
+        try root.makePath(dirname[1..]);
+    } else {
+        try std.fs.cwd().makePath(dirname);
+    }
 }
 
 test "identity store encodes and decodes persisted seed identity" {
@@ -78,4 +118,24 @@ test "identity store encodes and decodes persisted seed identity" {
     try std.testing.expectEqualSlices(u8, &stored.seed, &decoded.seed);
     try std.testing.expectEqualSlices(u8, &stored.bound.key_pair.public_key, &decoded.bound.key_pair.public_key);
     try std.testing.expect(stored.bound.peer_id.eql(decoded.bound.peer_id));
+}
+
+test "identity store writes generated identities to disk" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const tmp_path = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(tmp_path);
+    const full_path = try std.fmt.allocPrint(std.testing.allocator, "{s}/state/identity.txt", .{tmp_path});
+    defer std.testing.allocator.free(full_path);
+
+    const stored = try generateAndWrite(full_path);
+    _ = stored;
+
+    var file = try tmp.dir.openFile("state/identity.txt", .{});
+    defer file.close();
+
+    var buffer: [512]u8 = undefined;
+    const len = try file.readAll(&buffer);
+    try std.testing.expect(std.mem.indexOf(u8, buffer[0..len], file_magic) != null);
 }
