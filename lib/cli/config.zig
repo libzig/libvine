@@ -47,7 +47,7 @@ fn parseSubcommand(arg: []const u8) ?Subcommand {
     return null;
 }
 
-fn parseConfigPath(args: []const []const u8, default_config_path: []const u8) ![]const u8 {
+pub fn parseConfigPath(args: []const []const u8, default_config_path: []const u8) ![]const u8 {
     var config_path = default_config_path;
     var i: usize = 0;
     while (i < args.len) : (i += 1) {
@@ -64,7 +64,7 @@ fn parseConfigPath(args: []const []const u8, default_config_path: []const u8) ![
     return config_path;
 }
 
-fn validateFilesystem(config_path: []const u8, identity_path: []const u8) ConfigError!void {
+pub fn validateFilesystem(config_path: []const u8, identity_path: []const u8) ConfigError!void {
     try validateConfigPath(config_path);
     try validateIdentityPath(identity_path);
 }

@@ -13,6 +13,7 @@ const Command = enum {
     identity,
     config,
     daemon,
+    doctor,
     up,
     down,
     status,
@@ -71,6 +72,7 @@ fn parseCommand(arg: []const u8) ?Command {
     if (std.mem.eql(u8, arg, "identity")) return .identity;
     if (std.mem.eql(u8, arg, "config")) return .config;
     if (std.mem.eql(u8, arg, "daemon")) return .daemon;
+    if (std.mem.eql(u8, arg, "doctor")) return .doctor;
     if (std.mem.eql(u8, arg, "up")) return .up;
     if (std.mem.eql(u8, arg, "down")) return .down;
     if (std.mem.eql(u8, arg, "status")) return .status;
@@ -93,6 +95,7 @@ fn dispatch(command: Command, args: []const []const u8) !void {
             .state_path = default_runtime_state_path,
             .log_path = default_log_path,
         }),
+        .doctor => try libvine.cli.doctor.run(args, default_config_path),
         .up => try libvine.cli.runtime.runUp(args, default_config_path),
         .down => try libvine.cli.runtime.runDown(args, default_pidfile_path),
         .status => try libvine.cli.runtime.runStatus(args, default_config_path, default_runtime_state_path),
@@ -122,6 +125,7 @@ test "top level commands parse correctly" {
     try std.testing.expectEqual(Command.identity, parseCommand("identity").?);
     try std.testing.expectEqual(Command.config, parseCommand("config").?);
     try std.testing.expectEqual(Command.daemon, parseCommand("daemon").?);
+    try std.testing.expectEqual(Command.doctor, parseCommand("doctor").?);
     try std.testing.expectEqual(Command.up, parseCommand("up").?);
     try std.testing.expectEqual(Command.down, parseCommand("down").?);
     try std.testing.expectEqual(Command.status, parseCommand("status").?);
@@ -147,6 +151,7 @@ fn printHelp() !void {
         \\    identity
         \\    config
         \\    daemon
+        \\    doctor
         \\    up
         \\    down
         \\    status
