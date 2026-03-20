@@ -1,12 +1,19 @@
 const std = @import("std");
 const VineError = @import("../common/error.zig").VineError;
 
+pub const max_network_id_len: usize = 64;
+pub const peer_id_len: usize = 32;
+pub const max_control_payload_len: usize = 4 * 1024;
+pub const max_data_payload_len: usize = 64 * 1024;
+pub const max_prefix_count: usize = 256;
+pub const max_route_table_entries: usize = 1024;
+
 pub const NetworkId = struct {
-    bytes: [64]u8 = [_]u8{0} ** 64,
+    bytes: [max_network_id_len]u8 = [_]u8{0} ** max_network_id_len,
     len: u8 = 0,
 
     pub fn init(value: []const u8) VineError!NetworkId {
-        if (value.len == 0 or value.len > 64) return VineError.InvalidNetworkId;
+        if (value.len == 0 or value.len > max_network_id_len) return VineError.InvalidNetworkId;
 
         var id = NetworkId{};
         @memcpy(id.bytes[0..value.len], value);
@@ -121,16 +128,16 @@ pub const VinePrefix = struct {
 };
 
 pub const PeerId = struct {
-    bytes: [32]u8,
+    bytes: [peer_id_len]u8,
 
-    pub fn init(bytes: [32]u8) PeerId {
+    pub fn init(bytes: [peer_id_len]u8) PeerId {
         return .{ .bytes = bytes };
     }
 
     pub fn decode(bytes: []const u8) VineError!PeerId {
-        if (bytes.len != 32) return VineError.InvalidPeerId;
+        if (bytes.len != peer_id_len) return VineError.InvalidPeerId;
 
-        var out: [32]u8 = undefined;
+        var out: [peer_id_len]u8 = undefined;
         @memcpy(&out, bytes);
         return init(out);
     }
