@@ -7,6 +7,7 @@ const linux = @import("../linux/linux.zig");
 
 pub const RuntimeConfig = struct {
     node_config: api.config.NodeConfig,
+    local_membership: core.membership.LocalMembership,
 };
 
 pub fn load(allocator: std.mem.Allocator, config_path: []const u8) !RuntimeConfig {
@@ -35,6 +36,16 @@ pub fn load(allocator: std.mem.Allocator, config_path: []const u8) !RuntimeConfi
                 .allow_signaling_upgrade = parsed.policy.allow_signaling_upgrade,
                 .strict_allowlist = parsed.policy.strict_allowlist,
             },
+        },
+        .local_membership = .{
+            .network_id = try core.types.NetworkId.init(parsed.node.network_id),
+            .peer_id = stored.bound.peer_id,
+            .prefix = try core.types.VinePrefix.init(
+                try core.types.VineAddress.parse(parsed.tun.address),
+                parsed.tun.prefix_len,
+            ),
+            .epoch = core.types.MembershipEpoch.init(1),
+            .attached_at_ms = 0,
         },
     };
 }
@@ -65,6 +76,13 @@ test "runtime config module captures a node config translation target" {
                 .local_address = @import("../core/types.zig").VineAddress.init(.{ 10, 42, 0, 1 }),
                 .prefix_len = 24,
             },
+        },
+        .local_membership = .{
+            .network_id = try @import("../core/types.zig").NetworkId.init("devnet"),
+            .peer_id = @import("../core/types.zig").PeerId.init(.{0x42} ** @import("../core/types.zig").peer_id_len),
+            .prefix = try @import("../core/types.zig").VinePrefix.parse("10.42.0.0/24"),
+            .epoch = @import("../core/types.zig").MembershipEpoch.init(1),
+            .attached_at_ms = 0,
         },
     };
 
@@ -113,4 +131,6 @@ test "runtime config loads node config from persisted config and identity files"
     try std.testing.expectEqual(@as(u8, 24), loaded.node_config.tun.prefix_len);
     try std.testing.expect(!loaded.node_config.policy.allow_signaling_upgrade);
     try std.testing.expectEqual(@as(u8, 'v'), loaded.node_config.tun.ifname[0]);
+    try std.testing.expect(loaded.local_membership.prefix.contains(core.types.VineAddress.init(.{ 10, 42, 0, 99 })));
+    try std.testing.expect(loaded.local_membership.peer_id.eql(loaded.node_config.local_peer_id.?));
 }
