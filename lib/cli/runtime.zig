@@ -15,6 +15,12 @@ const DiagnosticsSnapshot = struct {
     bootstrap_count: usize,
 };
 
+const PeerDiagnostics = struct {
+    peer_id: core.types.PeerId,
+    prefix: core.types.VinePrefix,
+    relay_capable: bool,
+};
+
 pub fn runUp(args: []const []const u8, default_config_path: []const u8) !void {
     const config_path = try parseConfigPath(args, default_config_path);
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -83,6 +89,20 @@ pub fn runStatus(args: []const []const u8, default_config_path: []const u8, stat
 
     const snapshot = try buildDiagnosticsSnapshot(allocator, config_path, state_path);
     try printStatus(snapshot);
+}
+
+pub fn runPeers(args: []const []const u8, default_config_path: []const u8) !void {
+    const config_path = try parseConfigPath(args, default_config_path);
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    var runtime_cfg = try runtime.runtime_config.load(allocator, config_path);
+    defer runtime_cfg.deinit(allocator);
+
+    const peers = try buildPeerDiagnostics(allocator, runtime_cfg.enrolled_peers);
+    defer allocator.free(peers);
+    try printPeers(peers);
 }
 
 pub fn runSessions(args: []const []const u8, default_config_path: []const u8) !void {
@@ -218,6 +238,37 @@ fn printStatus(snapshot: DiagnosticsSnapshot) !void {
     );
 }
 
+fn buildPeerDiagnostics(
+    allocator: std.mem.Allocator,
+    enrolled_peers: []const runtime.enrollment.EnrollmentState.EnrolledPeer,
+) ![]PeerDiagnostics {
+    const peers = try allocator.alloc(PeerDiagnostics, enrolled_peers.len);
+    for (enrolled_peers, 0..) |peer, i| {
+        peers[i] = .{
+            .peer_id = peer.peer_id,
+            .prefix = peer.prefix,
+            .relay_capable = peer.relay_capable,
+        };
+    }
+    return peers;
+}
+
+fn printPeers(peers: []const PeerDiagnostics) !void {
+    std.debug.print("vine peers\ncount={d}\n", .{peers.len});
+    for (peers) |peer| {
+        var prefix_buffer: [32]u8 = undefined;
+        const prefix_text = try std.fmt.bufPrint(
+            &prefix_buffer,
+            "{f}/{d}",
+            .{ peer.prefix.network, peer.prefix.prefix_len },
+        );
+        std.debug.print(
+            "peer={f}\nprefix={s}\nrelay_capable={any}\n",
+            .{ peer.peer_id, prefix_text, peer.relay_capable },
+        );
+    }
+}
+
 fn preferenceLabel(preference: core.route_table.RouteEntry.Preference) []const u8 {
     return switch (preference) {
         .direct => "direct",
@@ -345,4 +396,24 @@ test "runtime cli builds status diagnostics snapshot" {
     try std.testing.expect(snapshot.local_peer_id.eql(stored.bound.peer_id));
     try std.testing.expectEqual(@as(usize, 1), snapshot.peer_count);
     try std.testing.expectEqual(@as(usize, 1), snapshot.bootstrap_count);
+}
+
+test "runtime cli builds peer diagnostics from enrolled peers" {
+    const enrolled = [_]runtime.enrollment.EnrollmentState.EnrolledPeer{
+        .{
+            .peer_id = core.types.PeerId.init(.{0x91} ** core.types.peer_id_len),
+            .prefix = try core.types.VinePrefix.parse("10.42.1.0/24"),
+        },
+        .{
+            .peer_id = core.types.PeerId.init(.{0x92} ** core.types.peer_id_len),
+            .prefix = try core.types.VinePrefix.parse("10.42.2.0/24"),
+            .relay_capable = true,
+        },
+    };
+    const peers = try buildPeerDiagnostics(std.testing.allocator, &enrolled);
+    defer std.testing.allocator.free(peers);
+
+    try std.testing.expectEqual(@as(usize, 2), peers.len);
+    try std.testing.expect(peers[0].prefix.contains(try core.types.VineAddress.parse("10.42.1.9")));
+    try std.testing.expect(peers[1].relay_capable);
 }

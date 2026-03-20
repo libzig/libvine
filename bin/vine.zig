@@ -16,6 +16,7 @@ const Command = enum {
     up,
     down,
     status,
+    peers,
     sessions,
     diagnostics,
 };
@@ -69,6 +70,7 @@ fn parseCommand(arg: []const u8) ?Command {
     if (std.mem.eql(u8, arg, "up")) return .up;
     if (std.mem.eql(u8, arg, "down")) return .down;
     if (std.mem.eql(u8, arg, "status")) return .status;
+    if (std.mem.eql(u8, arg, "peers")) return .peers;
     if (std.mem.eql(u8, arg, "sessions")) return .sessions;
     if (std.mem.eql(u8, arg, "diagnostics")) return .diagnostics;
     return null;
@@ -86,6 +88,7 @@ fn dispatch(command: Command, args: []const []const u8) !void {
         .up => try libvine.cli.runtime.runUp(args, default_config_path),
         .down => try libvine.cli.runtime.runDown(args, default_pidfile_path),
         .status => try libvine.cli.runtime.runStatus(args, default_config_path, default_runtime_state_path),
+        .peers => try libvine.cli.runtime.runPeers(args, default_config_path),
         .sessions => try libvine.cli.runtime.runSessions(args, default_config_path),
         .diagnostics => std.debug.print("vine diagnostics: not implemented yet\n", .{}),
     }
@@ -110,9 +113,9 @@ test "top level commands parse correctly" {
     try std.testing.expectEqual(Command.up, parseCommand("up").?);
     try std.testing.expectEqual(Command.down, parseCommand("down").?);
     try std.testing.expectEqual(Command.status, parseCommand("status").?);
+    try std.testing.expectEqual(Command.peers, parseCommand("peers").?);
     try std.testing.expectEqual(Command.sessions, parseCommand("sessions").?);
     try std.testing.expectEqual(Command.diagnostics, parseCommand("diagnostics").?);
-    try std.testing.expect(parseCommand("peers") == null);
 }
 
 fn printHelp() !void {
@@ -131,6 +134,7 @@ fn printHelp() !void {
         \\    up
         \\    down
         \\    status
+        \\    peers
         \\    sessions
         \\    diagnostics
         \\
