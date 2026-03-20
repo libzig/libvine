@@ -298,3 +298,64 @@ test "runtime config translates multiple configured peers into startup state" {
     try std.testing.expect(loaded.relay_peers[0].eql(peer_b));
     try std.testing.expect(!loaded.node_config.policy.allow_relay);
 }
+
+test "runtime config keeps identity and configured prefix as distinct concerns" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const root = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(root);
+    const identity_path = try std.fmt.allocPrint(std.testing.allocator, "{s}/identity", .{root});
+    defer std.testing.allocator.free(identity_path);
+    const stored = try identity_store.generateAndWrite(identity_path);
+
+    const config_a_path = try std.fmt.allocPrint(std.testing.allocator, "{s}/a.toml", .{root});
+    defer std.testing.allocator.free(config_a_path);
+    const config_b_path = try std.fmt.allocPrint(std.testing.allocator, "{s}/b.toml", .{root});
+    defer std.testing.allocator.free(config_b_path);
+
+    const config_a = try std.fmt.allocPrint(
+        std.testing.allocator,
+        \\[node]
+        \\name = "alpha"
+        \\network_id = "home-net"
+        \\identity_path = "{s}"
+        \\
+        \\[tun]
+        \\name = "vine0"
+        \\address = "10.42.0.1"
+        \\prefix_len = 24
+        \\mtu = 1400
+        ,
+        .{identity_path},
+    );
+    defer std.testing.allocator.free(config_a);
+    const config_b = try std.fmt.allocPrint(
+        std.testing.allocator,
+        \\[node]
+        \\name = "alpha"
+        \\network_id = "home-net"
+        \\identity_path = "{s}"
+        \\
+        \\[tun]
+        \\name = "vine0"
+        \\address = "10.99.0.1"
+        \\prefix_len = 24
+        \\mtu = 1400
+        ,
+        .{identity_path},
+    );
+    defer std.testing.allocator.free(config_b);
+
+    try tmp.dir.writeFile(.{ .sub_path = "a.toml", .data = config_a });
+    try tmp.dir.writeFile(.{ .sub_path = "b.toml", .data = config_b });
+
+    var loaded_a = try load(std.testing.allocator, config_a_path);
+    defer loaded_a.deinit(std.testing.allocator);
+    var loaded_b = try load(std.testing.allocator, config_b_path);
+    defer loaded_b.deinit(std.testing.allocator);
+
+    try std.testing.expect(loaded_a.node_config.local_peer_id.?.eql(stored.bound.peer_id));
+    try std.testing.expect(loaded_b.node_config.local_peer_id.?.eql(stored.bound.peer_id));
+    try std.testing.expect(!loaded_a.local_membership.prefix.network.eql(loaded_b.local_membership.prefix.network));
+}
