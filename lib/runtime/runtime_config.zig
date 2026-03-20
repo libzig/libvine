@@ -27,6 +27,7 @@ pub fn load(allocator: std.mem.Allocator, config_path: []const u8) !RuntimeConfi
     return .{
         .node_config = .{
             .identity = .{ .inline_seed = stored.seed },
+            .local_peer_id = stored.bound.peer_id,
             .network_id = try core.types.NetworkId.init(parsed.node.network_id),
             .tun = try loadTunConfig(parsed.tun),
             .policy = .{
@@ -108,6 +109,7 @@ test "runtime config loads node config from persisted config and identity files"
 
     const loaded = try load(std.testing.allocator, config_path);
     try std.testing.expectEqualStrings("home-net", loaded.node_config.network_id.encode());
+    try std.testing.expect(loaded.node_config.local_peer_id != null);
     try std.testing.expectEqual(@as(u8, 24), loaded.node_config.tun.prefix_len);
     try std.testing.expect(!loaded.node_config.policy.allow_signaling_upgrade);
     try std.testing.expectEqual(@as(u8, 'v'), loaded.node_config.tun.ifname[0]);

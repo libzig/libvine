@@ -24,6 +24,7 @@ pub const PolicyToggles = struct {
 
 pub const NodeConfig = struct {
     identity: IdentitySource = .generated,
+    local_peer_id: ?types.PeerId = null,
     network_id: types.NetworkId,
     tun: linux.tun.TunConfig,
     allowlist: []const types.PeerId = &.{},
@@ -44,12 +45,14 @@ test "config surface exports stable defaults" {
 
     try @import("std").testing.expectEqual(@as(usize, 0), config.allowlist.len);
     try @import("std").testing.expect(config.policy.allow_relay);
+    try @import("std").testing.expect(config.local_peer_id == null);
 }
 
 test "node config captures allowlist bootstrap peers and policy toggles" {
     const peer = types.PeerId.init(.{0x42} ** types.peer_id_len);
     const config = NodeConfig{
         .identity = .{ .inline_seed = [_]u8{7} ** 32 },
+        .local_peer_id = peer,
         .network_id = try types.NetworkId.init("prod"),
         .tun = .{
             .ifname = [_]u8{ 'v', 'n', '1', 0 } ++ ([_]u8{0} ** 12),
@@ -68,6 +71,7 @@ test "node config captures allowlist bootstrap peers and policy toggles" {
     };
 
     try @import("std").testing.expectEqual(@as(usize, 1), config.allowlist.len);
+    try @import("std").testing.expect(config.local_peer_id.?.eql(peer));
     try @import("std").testing.expectEqualStrings("seed://peer-a", config.bootstrap_peers[0].address);
     try @import("std").testing.expect(config.seed_records[0].peer_id.eql(peer));
     try @import("std").testing.expect(!config.policy.allow_relay);

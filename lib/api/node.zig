@@ -69,7 +69,7 @@ pub const Node = struct {
         var tun = try linux.tun.TunDevice.open();
         tun.applyConfig(node_config.tun);
 
-        const local_peer_id = derivePeerId(node_config.identity);
+        const local_peer_id = node_config.local_peer_id orelse derivePeerId(node_config.identity);
         return .{
             .config = node_config,
             .local_peer_id = local_peer_id,
@@ -260,6 +260,30 @@ test "node init wires identity membership tun and state tables" {
     try std.testing.expectEqual(@as(i32, 1), node.tun.fd);
     try std.testing.expect(node.local_membership.?.peer_id.eql(node.local_peer_id));
     try std.testing.expect(node.local_membership.?.prefix.contains(core.types.VineAddress.init(.{ 10, 60, 0, 99 })));
+}
+
+test "node prefers configured persisted peer id over derived seed hash" {
+    var routes = [_]core.route_table.RouteEntry{};
+    var sessions = [_]core.session_table.ActiveSession{};
+    var memberships = [_]core.membership.PeerMembership{};
+    const persisted_peer = core.types.PeerId.init(.{0x77} ** core.types.peer_id_len);
+
+    const node = try Node.init(.{
+        .identity = .{ .inline_seed = [_]u8{9} ** 32 },
+        .local_peer_id = persisted_peer,
+        .network_id = try core.types.NetworkId.init("devnet"),
+        .tun = .{
+            .ifname = [_]u8{ 'v', 'n', 'p', 0 } ++ ([_]u8{0} ** 12),
+            .local_address = core.types.VineAddress.init(.{ 10, 60, 1, 1 }),
+            .prefix_len = 24,
+        },
+    }, .{
+        .routes = &routes,
+        .sessions = &sessions,
+        .memberships = &memberships,
+    });
+
+    try std.testing.expect(node.local_peer_id.eql(persisted_peer));
 }
 
 test "node start and stop bound runtime ownership" {
