@@ -34,6 +34,14 @@ const SessionDiagnostics = struct {
     relay_capable: bool,
 };
 
+const CounterDiagnostics = struct {
+    packets_sent: usize,
+    packets_received: usize,
+    route_misses: usize,
+    session_failures: usize,
+    fallback_transitions: usize,
+};
+
 pub fn runUp(args: []const []const u8, default_config_path: []const u8) !void {
     const config_path = try parseConfigPath(args, default_config_path);
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -130,6 +138,16 @@ pub fn runRoutes(args: []const []const u8, default_config_path: []const u8) !voi
     const routes = try buildRouteDiagnostics(allocator, runtime_cfg.enrolled_peers);
     defer allocator.free(routes);
     try printRoutes(routes);
+}
+
+pub fn runCounters(args: []const []const u8, default_config_path: []const u8) !void {
+    const config_path = try parseConfigPath(args, default_config_path);
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const counters = try buildCounterDiagnostics(allocator, config_path);
+    try printCounters(counters);
 }
 
 pub fn runSessions(args: []const []const u8, default_config_path: []const u8) !void {
@@ -357,6 +375,51 @@ fn printRoutes(routes: []const RouteDiagnostics) !void {
     }
 }
 
+fn buildCounterDiagnostics(
+    allocator: std.mem.Allocator,
+    config_path: []const u8,
+) !CounterDiagnostics {
+    var runtime_cfg = try runtime.runtime_config.load(allocator, config_path);
+    defer runtime_cfg.deinit(allocator);
+
+    const routes = try allocator.alloc(core.route_table.RouteEntry, core.types.max_route_table_entries);
+    defer allocator.free(routes);
+    const sessions = try allocator.alloc(core.session_table.ActiveSession, 32);
+    defer allocator.free(sessions);
+    const memberships = try allocator.alloc(core.membership.PeerMembership, core.types.max_prefix_count);
+    defer allocator.free(memberships);
+
+    var node = try api.node.Node.init(runtime_cfg.node_config, .{
+        .routes = routes,
+        .sessions = sessions,
+        .memberships = memberships,
+    });
+    node.start();
+    defer node.stop();
+
+    const snapshot = node.debugSnapshot();
+    return .{
+        .packets_sent = snapshot.diagnostics.packets_sent,
+        .packets_received = snapshot.diagnostics.packets_received,
+        .route_misses = snapshot.diagnostics.route_misses,
+        .session_failures = snapshot.diagnostics.session_failures,
+        .fallback_transitions = snapshot.diagnostics.fallback_transitions,
+    };
+}
+
+fn printCounters(counters: CounterDiagnostics) !void {
+    std.debug.print(
+        "vine counters\npackets_sent={d}\npackets_received={d}\nroute_misses={d}\nsession_failures={d}\nfallback_transitions={d}\n",
+        .{
+            counters.packets_sent,
+            counters.packets_received,
+            counters.route_misses,
+            counters.session_failures,
+            counters.fallback_transitions,
+        },
+    );
+}
+
 fn preferenceLabel(preference: core.route_table.RouteEntry.Preference) []const u8 {
     return switch (preference) {
         .direct => "direct",
@@ -544,4 +607,38 @@ test "runtime cli builds route diagnostics from enrolled peers" {
     try std.testing.expectEqual(@as(usize, 2), routes.len);
     try std.testing.expectEqual(core.route_table.RouteEntry.Preference.direct_after_signaling, routes[0].preference);
     try std.testing.expectEqual(core.route_table.RouteEntry.Preference.relay, routes[1].preference);
+}
+
+test "runtime cli exposes node diagnostics counters" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const root = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(root);
+    const identity_path = try std.fmt.allocPrint(std.testing.allocator, "{s}/identity", .{root});
+    defer std.testing.allocator.free(identity_path);
+    _ = try @import("../config/identity_store.zig").generateAndWrite(identity_path);
+
+    const config_body = try std.fmt.allocPrint(
+        std.testing.allocator,
+        \\[node]
+        \\name = "alpha"
+        \\network_id = "home-net"
+        \\identity_path = "{s}"
+        \\
+        \\[tun]
+        \\name = "vine0"
+        \\address = "10.42.0.1"
+        \\prefix_len = 24
+        \\mtu = 1400
+    , .{identity_path});
+    defer std.testing.allocator.free(config_body);
+    try tmp.dir.writeFile(.{ .sub_path = "vine.toml", .data = config_body });
+
+    const config_path = try std.fmt.allocPrint(std.testing.allocator, "{s}/vine.toml", .{root});
+    defer std.testing.allocator.free(config_path);
+
+    const counters = try buildCounterDiagnostics(std.testing.allocator, config_path);
+    try std.testing.expectEqual(@as(usize, 0), counters.packets_sent);
+    try std.testing.expectEqual(@as(usize, 0), counters.fallback_transitions);
 }

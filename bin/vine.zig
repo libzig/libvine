@@ -19,6 +19,7 @@ const Command = enum {
     peers,
     routes,
     sessions,
+    counters,
     diagnostics,
 };
 
@@ -74,6 +75,7 @@ fn parseCommand(arg: []const u8) ?Command {
     if (std.mem.eql(u8, arg, "peers")) return .peers;
     if (std.mem.eql(u8, arg, "routes")) return .routes;
     if (std.mem.eql(u8, arg, "sessions")) return .sessions;
+    if (std.mem.eql(u8, arg, "counters")) return .counters;
     if (std.mem.eql(u8, arg, "diagnostics")) return .diagnostics;
     return null;
 }
@@ -93,6 +95,7 @@ fn dispatch(command: Command, args: []const []const u8) !void {
         .peers => try libvine.cli.runtime.runPeers(args, default_config_path),
         .routes => try libvine.cli.runtime.runRoutes(args, default_config_path),
         .sessions => try libvine.cli.runtime.runSessions(args, default_config_path),
+        .counters => try libvine.cli.runtime.runCounters(args, default_config_path),
         .diagnostics => std.debug.print("vine diagnostics: not implemented yet\n", .{}),
     }
 }
@@ -119,6 +122,7 @@ test "top level commands parse correctly" {
     try std.testing.expectEqual(Command.peers, parseCommand("peers").?);
     try std.testing.expectEqual(Command.routes, parseCommand("routes").?);
     try std.testing.expectEqual(Command.sessions, parseCommand("sessions").?);
+    try std.testing.expectEqual(Command.counters, parseCommand("counters").?);
     try std.testing.expectEqual(Command.diagnostics, parseCommand("diagnostics").?);
 }
 
@@ -141,6 +145,7 @@ fn printHelp() !void {
         \\    peers
         \\    routes
         \\    sessions
+        \\    counters
         \\    diagnostics
         \\
         \\DEFAULT CONFIG:
