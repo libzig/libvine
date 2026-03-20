@@ -39,3 +39,15 @@ pub const Keepalive = struct {
     session_id: types.SessionId,
     sent_at_ms: i64,
 };
+
+pub const DiagnosticPing = struct {
+    network_id: types.NetworkId,
+    nonce: u64,
+    sent_at_ms: i64,
+};
+
+pub const DiagnosticPong = struct {
+    network_id: types.NetworkId,
+    nonce: u64,
+    replied_at_ms: i64,
+};
