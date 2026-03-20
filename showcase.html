@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Addressing</title>
+        <title>Multi-PC Showcase</title>
 
 
         <!-- Custom HTML head -->
@@ -174,32 +174,71 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="addressing"><a class="header" href="#addressing">Addressing</a></h1>
-<p>The MVP uses an IPv4-only overlay model.</p>
-<h2 id="overlay-semantics"><a class="header" href="#overlay-semantics">Overlay Semantics</a></h2>
+                        <h1 id="multi-pc-showcase"><a class="header" href="#multi-pc-showcase">Multi-PC Showcase</a></h1>
+<p>The <code>examples/multi-pc/</code> directory is the reference deployment story for <code>vine</code> as a real binary.</p>
+<p>It uses four Linux machines running the same executable:</p>
 <ul>
-<li>each node belongs to one named overlay network</li>
-<li>each node owns one primary IPv4 prefix for the MVP</li>
-<li>packet forwarding is based on prefix ownership, not dynamic distributed routing</li>
-<li>route selection prefers the best reachable session provided by <code>libmesh</code></li>
+<li><code>alpha</code></li>
+<li><code>beta</code></li>
+<li><code>gamma</code></li>
+<li><code>relay</code></li>
 </ul>
-<h2 id="initial-constraints"><a class="header" href="#initial-constraints">Initial Constraints</a></h2>
+<p>Each machine keeps its own <code>libself</code> identity file and advertises one overlay prefix into the same network:</p>
 <ul>
-<li>no IPv6 data plane in the MVP</li>
-<li>no multi-prefix complexity unless later slices explicitly add it</li>
-<li>no overlapping prefix acceptance without a deterministic conflict policy</li>
+<li><code>alpha</code> -&gt; <code>10.42.0.0/24</code></li>
+<li><code>beta</code> -&gt; <code>10.42.1.0/24</code></li>
+<li><code>gamma</code> -&gt; <code>10.42.2.0/24</code></li>
+<li><code>relay</code> -&gt; <code>10.42.254.0/24</code></li>
 </ul>
-<p>The addressing model stays intentionally small so control-plane compatibility and forwarding behavior can stabilize before broader routing features are attempted.</p>
+<h2 id="expected-path-story"><a class="header" href="#expected-path-story">Expected Path Story</a></h2>
+<p>The example is designed to demonstrate three normal cases and one failure case:</p>
+<ol>
+<li><code>alpha</code> talks to <code>beta</code> over a direct session.</li>
+<li><code>gamma</code> reaches <code>beta</code> after signaling-assisted setup.</li>
+<li><code>gamma</code> reaches <code>alpha</code> through <code>relay</code> if no direct path can be formed.</li>
+<li><code>alpha</code> falls back to <code>relay</code> if the direct path to <code>beta</code> disappears.</li>
+</ol>
+<p>That is the intended <code>vine</code> operator model:</p>
+<ul>
+<li>direct when possible</li>
+<li>signaling when setup is needed</li>
+<li>relay when direct reachability fails</li>
+</ul>
+<h2 id="narrative-walkthrough"><a class="header" href="#narrative-walkthrough">Narrative Walkthrough</a></h2>
+<p>Start with all four configs installed and one identity generated per machine.</p>
+<p>Bring up <code>relay</code> first so the other nodes have a stable bootstrap target. Then start <code>alpha</code>, <code>beta</code>, and <code>gamma</code>.</p>
+<p>Once all nodes are running:</p>
+<ul>
+<li><code>vine peers</code> should show the allowlisted remote peers</li>
+<li><code>vine routes</code> should show owned prefixes for those peers</li>
+<li><code>vine sessions</code> should initially favor direct or signaling-assisted paths when available</li>
+</ul>
+<p>Now force a direct-path failure between <code>alpha</code> and <code>beta</code>. The expected recovery is:</p>
+<ul>
+<li>route ownership stays the same</li>
+<li>the preferred session changes</li>
+<li><code>relay_usage</code> and <code>fallback_transitions</code> increase</li>
+<li>traffic still has a path through <code>relay</code></li>
+</ul>
+<p>This is why relay capability belongs to the peer policy layer instead of to the overlay address itself.</p>
+<h2 id="files"><a class="header" href="#files">Files</a></h2>
+<ul>
+<li><code>examples/multi-pc/README.md</code></li>
+<li><code>examples/multi-pc/alpha.toml</code></li>
+<li><code>examples/multi-pc/beta.toml</code></li>
+<li><code>examples/multi-pc/gamma.toml</code></li>
+<li><code>examples/multi-pc/relay.toml</code></li>
+</ul>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="mvp.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="diagnostics.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="control-plane.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="copying-to-machines.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -209,11 +248,11 @@
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="mvp.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="diagnostics.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="control-plane.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="copying-to-machines.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

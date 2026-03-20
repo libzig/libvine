@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Addressing</title>
+        <title>Copying To Multiple Machines</title>
 
 
         <!-- Custom HTML head -->
@@ -174,32 +174,57 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="addressing"><a class="header" href="#addressing">Addressing</a></h1>
-<p>The MVP uses an IPv4-only overlay model.</p>
-<h2 id="overlay-semantics"><a class="header" href="#overlay-semantics">Overlay Semantics</a></h2>
+                        <h1 id="copying-the-binary-to-multiple-machines"><a class="header" href="#copying-the-binary-to-multiple-machines">Copying The Binary To Multiple Machines</a></h1>
+<p><code>vine</code> is meant to be the same binary on every Linux PC in the deployment.</p>
+<p>The node role comes from local config and local identity, not from a machine-specific build.</p>
+<h2 id="recommended-layout"><a class="header" href="#recommended-layout">Recommended Layout</a></h2>
+<p>Install the binary once per host:</p>
+<pre><code class="language-text">/usr/local/bin/vine
+</code></pre>
+<p>Install config and state paths separately:</p>
+<pre><code class="language-text">/etc/libvine/vine.toml
+/var/lib/libvine/
+</code></pre>
+<p>That lets you copy one executable everywhere while keeping:</p>
 <ul>
-<li>each node belongs to one named overlay network</li>
-<li>each node owns one primary IPv4 prefix for the MVP</li>
-<li>packet forwarding is based on prefix ownership, not dynamic distributed routing</li>
-<li>route selection prefers the best reachable session provided by <code>libmesh</code></li>
+<li>one identity file per machine</li>
+<li>one node config per machine</li>
+<li>one runtime state directory per machine</li>
 </ul>
-<h2 id="initial-constraints"><a class="header" href="#initial-constraints">Initial Constraints</a></h2>
+<h2 id="operator-sequence"><a class="header" href="#operator-sequence">Operator Sequence</a></h2>
+<p>On each machine:</p>
+<ol>
+<li>copy the <code>vine</code> binary to the same path</li>
+<li>create <code>/etc/libvine</code> and <code>/var/lib/libvine</code></li>
+<li>run <code>vine identity init</code></li>
+<li>install the machine-specific <code>vine.toml</code></li>
+<li>validate with <code>vine config validate</code></li>
+<li>start the daemon</li>
+</ol>
+<h2 id="what-must-differ-per-machine"><a class="header" href="#what-must-differ-per-machine">What Must Differ Per Machine</a></h2>
 <ul>
-<li>no IPv6 data plane in the MVP</li>
-<li>no multi-prefix complexity unless later slices explicitly add it</li>
-<li>no overlapping prefix acceptance without a deterministic conflict policy</li>
+<li>the persisted <code>libself</code> identity</li>
+<li>the local node name</li>
+<li>the local TUN address and advertised prefix</li>
+<li>the bootstrap addresses that point at reachable peers</li>
 </ul>
-<p>The addressing model stays intentionally small so control-plane compatibility and forwarding behavior can stabilize before broader routing features are attempted.</p>
+<h2 id="what-must-stay-shared"><a class="header" href="#what-must-stay-shared">What Must Stay Shared</a></h2>
+<ul>
+<li>the binary itself</li>
+<li>the <code>network_id</code></li>
+<li>the allowlist view of which peer owns which prefix</li>
+<li>the operator workflow and CLI surface</li>
+</ul>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="mvp.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="showcase.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="control-plane.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="bootstrap-and-relay.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -209,11 +234,11 @@
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="mvp.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="showcase.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="control-plane.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="bootstrap-and-relay.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

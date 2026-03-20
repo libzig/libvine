@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Addressing</title>
+        <title>TUN Permissions</title>
 
 
         <!-- Custom HTML head -->
@@ -174,32 +174,50 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="addressing"><a class="header" href="#addressing">Addressing</a></h1>
-<p>The MVP uses an IPv4-only overlay model.</p>
-<h2 id="overlay-semantics"><a class="header" href="#overlay-semantics">Overlay Semantics</a></h2>
+                        <h1 id="tun-permissions-and-route-installation"><a class="header" href="#tun-permissions-and-route-installation">TUN Permissions And Route Installation</a></h1>
+<p><code>vine</code> is a user-space VPN, but it still depends on Linux networking privileges.</p>
+<p>The minimum operator expectation is:</p>
 <ul>
-<li>each node belongs to one named overlay network</li>
-<li>each node owns one primary IPv4 prefix for the MVP</li>
-<li>packet forwarding is based on prefix ownership, not dynamic distributed routing</li>
-<li>route selection prefers the best reachable session provided by <code>libmesh</code></li>
+<li>the process can create or open the configured TUN device</li>
+<li>the process can assign the configured overlay address</li>
+<li>the process can install and remove local routes for owned prefixes</li>
 </ul>
-<h2 id="initial-constraints"><a class="header" href="#initial-constraints">Initial Constraints</a></h2>
+<h2 id="what-usually-requires-privilege"><a class="header" href="#what-usually-requires-privilege">What Usually Requires Privilege</a></h2>
+<p>On a normal Linux host, the following actions often need root or equivalent delegated capability:</p>
 <ul>
-<li>no IPv6 data plane in the MVP</li>
-<li>no multi-prefix complexity unless later slices explicitly add it</li>
-<li>no overlapping prefix acceptance without a deterministic conflict policy</li>
+<li>opening <code>/dev/net/tun</code></li>
+<li>setting interface flags</li>
+<li>assigning interface addresses</li>
+<li>changing route tables</li>
 </ul>
-<p>The addressing model stays intentionally small so control-plane compatibility and forwarding behavior can stabilize before broader routing features are attempted.</p>
+<p>If those operations fail, the control-plane side of <code>vine</code> may still start while packet forwarding remains broken.</p>
+<h2 id="practical-deployment-rule"><a class="header" href="#practical-deployment-rule">Practical Deployment Rule</a></h2>
+<p>Validate host readiness before relying on the daemon:</p>
+<ol>
+<li>confirm <code>/dev/net/tun</code> exists</li>
+<li>confirm the runtime user can access it</li>
+<li>confirm route changes are permitted</li>
+<li>confirm the configured interface name is acceptable for the target host</li>
+</ol>
+<h2 id="failure-shape"><a class="header" href="#failure-shape">Failure Shape</a></h2>
+<p>When TUN setup or route installation fails, expect:</p>
+<ul>
+<li>no usable overlay interface</li>
+<li>no local packet injection path</li>
+<li>misleading peer/session state if you only inspect the control plane</li>
+</ul>
+<p>That is why host readiness checks belong in <code>vine doctor</code> and why operators should treat TUN permissions as
+part of initial deployment, not as a later optimization.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="mvp.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="enrollment-across-machines.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="control-plane.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="lan-deployment.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -209,11 +227,11 @@
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="mvp.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="enrollment-across-machines.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="control-plane.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="lan-deployment.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

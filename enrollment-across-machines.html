@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Addressing</title>
+        <title>Enrollment Across Machines</title>
 
 
         <!-- Custom HTML head -->
@@ -174,32 +174,51 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="addressing"><a class="header" href="#addressing">Addressing</a></h1>
-<p>The MVP uses an IPv4-only overlay model.</p>
-<h2 id="overlay-semantics"><a class="header" href="#overlay-semantics">Overlay Semantics</a></h2>
+                        <h1 id="identity-enrollment-across-machines"><a class="header" href="#identity-enrollment-across-machines">Identity Enrollment Across Machines</a></h1>
+<p>Every machine needs its own local <code>libself</code> identity before it can join the overlay.</p>
+<p>The enrollment rule is:</p>
 <ul>
-<li>each node belongs to one named overlay network</li>
-<li>each node owns one primary IPv4 prefix for the MVP</li>
-<li>packet forwarding is based on prefix ownership, not dynamic distributed routing</li>
-<li>route selection prefers the best reachable session provided by <code>libmesh</code></li>
+<li>identity is generated locally</li>
+<li>public identity material is shared with operators</li>
+<li>allowlist entries are updated on every participating machine</li>
 </ul>
-<h2 id="initial-constraints"><a class="header" href="#initial-constraints">Initial Constraints</a></h2>
+<h2 id="recommended-flow"><a class="header" href="#recommended-flow">Recommended Flow</a></h2>
+<ol>
+<li>On each machine, run <code>vine identity init</code>.</li>
+<li>Export the public identity material with <code>vine identity export-public</code>.</li>
+<li>Record the peer fingerprint with <code>vine identity fingerprint</code>.</li>
+<li>Distribute the public identity or fingerprint out of band.</li>
+<li>Update each machine’s <code>[[allowed_peers]]</code> list so the authenticated peer ID matches the intended prefix owner.</li>
+</ol>
+<h2 id="why-this-matters"><a class="header" href="#why-this-matters">Why This Matters</a></h2>
+<p>Overlay IPs can be changed later. The <code>libself</code> identity is the stable trust anchor.</p>
+<p>That means enrollment is really:</p>
 <ul>
-<li>no IPv6 data plane in the MVP</li>
-<li>no multi-prefix complexity unless later slices explicitly add it</li>
-<li>no overlapping prefix acceptance without a deterministic conflict policy</li>
+<li>collect remote peer identity</li>
+<li>bind it to an owned prefix</li>
+<li>bind relay capability as policy</li>
 </ul>
-<p>The addressing model stays intentionally small so control-plane compatibility and forwarding behavior can stabilize before broader routing features are attempted.</p>
+<p>not:</p>
+<ul>
+<li>trust whoever claims a certain overlay IP</li>
+</ul>
+<h2 id="operational-advice"><a class="header" href="#operational-advice">Operational Advice</a></h2>
+<ul>
+<li>keep fingerprints in operator notes or inventory</li>
+<li>review allowlist updates before daemon restart or reload</li>
+<li>reject any peer whose claimed prefix does not match the configured owner</li>
+</ul>
+<p>In other words, machine enrollment is a trust update first and a routing update second.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="mvp.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="bootstrap-and-relay.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="control-plane.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="tun-permissions.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -209,11 +228,11 @@
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="mvp.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="bootstrap-and-relay.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="control-plane.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="tun-permissions.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

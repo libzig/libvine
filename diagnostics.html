@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Addressing</title>
+        <title>Diagnostics</title>
 
 
         <!-- Custom HTML head -->
@@ -174,32 +174,60 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="addressing"><a class="header" href="#addressing">Addressing</a></h1>
-<p>The MVP uses an IPv4-only overlay model.</p>
-<h2 id="overlay-semantics"><a class="header" href="#overlay-semantics">Overlay Semantics</a></h2>
+                        <h1 id="diagnostics"><a class="header" href="#diagnostics">Diagnostics</a></h1>
+<p>Step 9 turns <code>vine</code> into an operator-facing tool instead of a Zig-only runtime.</p>
+<p>The current diagnostics commands are:</p>
 <ul>
-<li>each node belongs to one named overlay network</li>
-<li>each node owns one primary IPv4 prefix for the MVP</li>
-<li>packet forwarding is based on prefix ownership, not dynamic distributed routing</li>
-<li>route selection prefers the best reachable session provided by <code>libmesh</code></li>
+<li><code>vine status</code></li>
+<li><code>vine peers</code></li>
+<li><code>vine routes</code></li>
+<li><code>vine sessions</code></li>
+<li><code>vine counters</code></li>
+<li><code>vine snapshot</code></li>
+<li><code>vine ping &lt;overlay-ip&gt;</code></li>
 </ul>
-<h2 id="initial-constraints"><a class="header" href="#initial-constraints">Initial Constraints</a></h2>
+<p>These commands are config-driven and are meant to answer different questions:</p>
 <ul>
-<li>no IPv6 data plane in the MVP</li>
-<li>no multi-prefix complexity unless later slices explicitly add it</li>
-<li>no overlapping prefix acceptance without a deterministic conflict policy</li>
+<li><code>status</code>: is the node configured correctly and what overlay identity is it using?</li>
+<li><code>peers</code>: which peers and prefixes are configured?</li>
+<li><code>routes</code>: which overlay prefixes point at which peers?</li>
+<li><code>sessions</code>: which session class is preferred for each peer?</li>
+<li><code>counters</code>: are packets failing, missing routes, or falling back to relay?</li>
+<li><code>snapshot</code>: dump the major sections together</li>
+<li><code>ping</code>: which peer and session would carry traffic to a given overlay IP?</li>
 </ul>
-<p>The addressing model stays intentionally small so control-plane compatibility and forwarding behavior can stabilize before broader routing features are attempted.</p>
+<p>Diagnostics support two explicit output modes:</p>
+<ul>
+<li><code>--format text</code></li>
+<li><code>--format json</code></li>
+</ul>
+<p>Use text for shell-driven inspection and JSON for machine parsing.</p>
+<p>The counters surface currently includes:</p>
+<ul>
+<li><code>packets_sent</code></li>
+<li><code>packets_received</code></li>
+<li><code>route_misses</code></li>
+<li><code>session_failures</code></li>
+<li><code>fallback_transitions</code></li>
+<li><code>relay_usage</code></li>
+</ul>
+<p><code>relay_usage</code> is especially useful when a deployment is technically working but direct paths are not being selected as often as expected.</p>
+<p>Example:</p>
+<pre><code class="language-text">vine status --format text -c /etc/libvine/vine.toml
+vine sessions --format json -c /etc/libvine/vine.toml
+vine ping --format text -c /etc/libvine/vine.toml 10.42.9.7
+</code></pre>
+<p>This is still a lightweight diagnostics layer, but it is now good enough to inspect peer ownership, route intent, preferred transport paths, and relay dependence without reading the Zig code.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="mvp.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="packet-flow.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="control-plane.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="showcase.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -209,11 +237,11 @@
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="mvp.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="packet-flow.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="control-plane.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="showcase.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>
