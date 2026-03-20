@@ -446,3 +446,59 @@ test "session manager falls back to relay when preferred paths die" {
     try @import("std").testing.expectEqual(@as(u64, 30), manager.failPreferredPath(peer.peer_id).?.session_id.value);
     try @import("std").testing.expectEqual(@as(u64, 30), manager.preferredSessionForPeer(peer.peer_id).?.session_id.value);
 }
+
+test "session manager handles churn promotion and failover across reconnects" {
+    const libmesh = @import("libmesh");
+    const peer = ManagedPeer{
+        .peer_id = core.types.PeerId.init(.{0x83} ** core.types.peer_id_len),
+        .relay_capable = true,
+    };
+    const relay_candidate = integration.libmesh_adapter.CandidatePeer{
+        .peer_id = peer.peer_id,
+        .node_id = libmesh.Foundation.NodeId.fromPublicKey([_]u8{0x83} ** 32),
+    };
+    const direct_candidate = integration.libmesh_adapter.CandidatePeer{
+        .peer_id = peer.peer_id,
+        .node_id = libmesh.Foundation.NodeId.fromPublicKey([_]u8{0x84} ** 32),
+    };
+    var sessions = [_]core.session_table.ActiveSession{
+        .{ .peer_id = core.types.PeerId.init(.{0} ** core.types.peer_id_len), .session_id = .{ .value = 0 }, .preference = .relay },
+        .{ .peer_id = core.types.PeerId.init(.{0} ** core.types.peer_id_len), .session_id = .{ .value = 0 }, .preference = .relay },
+        .{ .peer_id = core.types.PeerId.init(.{0} ** core.types.peer_id_len), .session_id = .{ .value = 0 }, .preference = .relay },
+    };
+    var manager = SessionManager.withMesh(
+        &.{peer},
+        &sessions,
+        integration.libmesh_adapter.LibmeshAdapter.withReachability(
+            &.{relay_candidate},
+            &.{.{ .relay = relay_candidate }},
+        ),
+    );
+
+    try @import("std").testing.expectEqual(@as(usize, 1), manager.connectConfiguredPeers());
+    try @import("std").testing.expectEqual(@as(u64, 1), manager.preferredSessionForPeer(peer.peer_id).?.session_id.value);
+
+    try @import("std").testing.expect(manager.trackHandle(peer, .{
+        .peer_id = peer.peer_id,
+        .session_id = .{ .value = 90 },
+        .plan = .{ .signaling_then_direct = direct_candidate },
+    }));
+    try @import("std").testing.expectEqual(@as(u64, 90), manager.preferredSessionForPeer(peer.peer_id).?.session_id.value);
+
+    try @import("std").testing.expect(manager.promoteHandle(peer, .{
+        .peer_id = peer.peer_id,
+        .session_id = .{ .value = 91 },
+        .plan = .{ .direct = direct_candidate },
+    }));
+    try @import("std").testing.expectEqual(@as(u64, 91), manager.preferredSessionForPeer(peer.peer_id).?.session_id.value);
+
+    try @import("std").testing.expectEqual(@as(u64, 1), manager.failPreferredPath(peer.peer_id).?.session_id.value);
+    try @import("std").testing.expectEqual(@as(u64, 1), manager.preferredSessionForPeer(peer.peer_id).?.session_id.value);
+
+    try @import("std").testing.expect(manager.promoteHandle(peer, .{
+        .peer_id = peer.peer_id,
+        .session_id = .{ .value = 92 },
+        .plan = .{ .direct = direct_candidate },
+    }));
+    try @import("std").testing.expectEqual(@as(u64, 92), manager.preferredSessionForPeer(peer.peer_id).?.session_id.value);
+}
