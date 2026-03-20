@@ -1,5 +1,19 @@
 const types = @import("../core/types.zig");
 
+pub const protocol_version_major: u16 = 0;
+pub const protocol_version_minor: u16 = 1;
+pub const max_message_len: usize = types.max_control_payload_len;
+
+pub const MessageTag = enum(u8) {
+    hello = 1,
+    join_announce = 2,
+    route_update = 3,
+    route_withdraw = 4,
+    keepalive = 5,
+    diagnostic_ping = 6,
+    diagnostic_pong = 7,
+};
+
 pub const CapabilityFlags = packed struct(u8) {
     relay_capable: bool = false,
     direct_capable: bool = true,
