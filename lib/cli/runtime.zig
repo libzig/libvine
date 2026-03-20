@@ -40,6 +40,7 @@ const CounterDiagnostics = struct {
     route_misses: usize,
     session_failures: usize,
     fallback_transitions: usize,
+    relay_usage: usize,
 };
 
 const OutputMode = enum {
@@ -67,7 +68,6 @@ pub fn runUp(args: []const []const u8, default_config_path: []const u8) !void {
     defer allocator.free(sessions);
     const memberships = try allocator.alloc(core.membership.PeerMembership, core.types.max_prefix_count);
     defer allocator.free(memberships);
-
     var node = try api.node.Node.init(runtime_cfg.node_config, .{
         .routes = routes,
         .sessions = sessions,
@@ -525,6 +525,35 @@ fn buildCounterDiagnostics(
     defer allocator.free(sessions);
     const memberships = try allocator.alloc(core.membership.PeerMembership, core.types.max_prefix_count);
     defer allocator.free(memberships);
+    const managed_peers = try allocator.alloc(runtime.session_manager.ManagedPeer, runtime_cfg.enrolled_peers.len);
+    defer allocator.free(managed_peers);
+    for (runtime_cfg.enrolled_peers, 0..) |peer, i| {
+        managed_peers[i] = .{ .peer_id = peer.peer_id, .relay_capable = peer.relay_capable };
+    }
+    const session_buffer = try allocator.alloc(core.session_table.ActiveSession, @max(runtime_cfg.enrolled_peers.len, 1));
+    defer allocator.free(session_buffer);
+    for (session_buffer) |*session| session.* = .{
+        .peer_id = core.types.PeerId.init(.{0} ** core.types.peer_id_len),
+        .session_id = .{ .value = 0 },
+        .preference = .relay,
+    };
+    const candidates = try allocator.alloc(integration.libmesh_adapter.CandidatePeer, runtime_cfg.enrolled_peers.len);
+    defer allocator.free(candidates);
+    const plans = try allocator.alloc(integration.libmesh_adapter.ReachabilityPlan, runtime_cfg.enrolled_peers.len);
+    defer allocator.free(plans);
+    for (runtime_cfg.enrolled_peers, 0..) |peer, i| {
+        const candidate = integration.libmesh_adapter.CandidatePeer{
+            .peer_id = peer.peer_id,
+            .node_id = @import("libmesh").Foundation.NodeId.fromPublicKey(peer.peer_id.bytes),
+        };
+        candidates[i] = candidate;
+        plans[i] = if (peer.relay_capable and runtime_cfg.node_config.policy.allow_relay)
+            .{ .relay = candidate }
+        else if (runtime_cfg.node_config.policy.allow_signaling_upgrade)
+            .{ .signaling_then_direct = candidate }
+        else
+            .{ .direct = candidate };
+    }
 
     var node = try api.node.Node.init(runtime_cfg.node_config, .{
         .routes = routes,
@@ -534,6 +563,14 @@ fn buildCounterDiagnostics(
     node.start();
     defer node.stop();
 
+    var manager = runtime.session_manager.SessionManager.withMesh(
+        managed_peers,
+        session_buffer,
+        integration.libmesh_adapter.LibmeshAdapter.withReachability(candidates, plans),
+    );
+    _ = manager.connectConfiguredPeers();
+    const session_view = try buildSessionDiagnostics(allocator, managed_peers, manager);
+    defer allocator.free(session_view);
     const snapshot = node.debugSnapshot();
     return .{
         .packets_sent = snapshot.diagnostics.packets_sent,
@@ -541,31 +578,34 @@ fn buildCounterDiagnostics(
         .route_misses = snapshot.diagnostics.route_misses,
         .session_failures = snapshot.diagnostics.session_failures,
         .fallback_transitions = snapshot.diagnostics.fallback_transitions,
+        .relay_usage = countSessionsByPreference(session_view, .relay),
     };
 }
 
 fn printCounters(counters: CounterDiagnostics, output_mode: OutputMode) !void {
     if (output_mode == .json) {
         std.debug.print(
-            "{{\"command\":\"counters\",\"packets_sent\":{d},\"packets_received\":{d},\"route_misses\":{d},\"session_failures\":{d},\"fallback_transitions\":{d}}}\n",
+            "{{\"command\":\"counters\",\"packets_sent\":{d},\"packets_received\":{d},\"route_misses\":{d},\"session_failures\":{d},\"fallback_transitions\":{d},\"relay_usage\":{d}}}\n",
             .{
                 counters.packets_sent,
                 counters.packets_received,
                 counters.route_misses,
                 counters.session_failures,
                 counters.fallback_transitions,
+                counters.relay_usage,
             },
         );
         return;
     }
     std.debug.print(
-        "vine counters\npackets_sent={d}\npackets_received={d}\nroute_misses={d}\nsession_failures={d}\nfallback_transitions={d}\n",
+        "vine counters\npackets_sent={d}\npackets_received={d}\nroute_misses={d}\nsession_failures={d}\nfallback_transitions={d}\nrelay_usage={d}\n",
         .{
             counters.packets_sent,
             counters.packets_received,
             counters.route_misses,
             counters.session_failures,
             counters.fallback_transitions,
+            counters.relay_usage,
         },
     );
 }
@@ -993,6 +1033,25 @@ test "runtime cli exposes node diagnostics counters" {
     const counters = try buildCounterDiagnostics(std.testing.allocator, config_path);
     try std.testing.expectEqual(@as(usize, 0), counters.packets_sent);
     try std.testing.expectEqual(@as(usize, 0), counters.fallback_transitions);
+    try std.testing.expectEqual(@as(usize, 0), counters.relay_usage);
+}
+
+test "runtime cli counts relay usage in diagnostics counters" {
+    const peers = [_]SessionDiagnostics{
+        .{
+            .peer_id = core.types.PeerId.init(.{0xA3} ** core.types.peer_id_len),
+            .session_id = .{ .value = 77 },
+            .mode = .relay,
+            .relay_capable = true,
+        },
+        .{
+            .peer_id = core.types.PeerId.init(.{0xA4} ** core.types.peer_id_len),
+            .session_id = .{ .value = 78 },
+            .mode = .direct,
+            .relay_capable = false,
+        },
+    };
+    try std.testing.expectEqual(@as(usize, 1), countSessionsByPreference(&peers, .relay));
 }
 
 test "runtime cli snapshot combines diagnostic sections" {
@@ -1027,6 +1086,7 @@ test "runtime cli snapshot combines diagnostic sections" {
         .route_misses = 0,
         .session_failures = 0,
         .fallback_transitions = 0,
+        .relay_usage = 0,
     }, .text);
 }
 
