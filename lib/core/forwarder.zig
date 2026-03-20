@@ -37,4 +37,18 @@ pub const Forwarder = struct {
         self.tun.writePacket(packet);
         return true;
     }
+
+    pub fn cleanupStaleSession(self: Forwarder, peer_id: types.PeerId) bool {
+        const fallback = self.sessions.fallbackToRelay(peer_id);
+        if (fallback != null) return true;
+
+        for (self.routes.entries) |*route| {
+            if (route.peer_id.eql(peer_id)) {
+                route.session_id = null;
+                route.tombstone = true;
+                return true;
+            }
+        }
+        return false;
+    }
 };
