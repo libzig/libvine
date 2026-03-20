@@ -22,4 +22,9 @@ pub const Forwarder = struct {
     pub fn lookupSessionForRoute(self: Forwarder, route: route_table.RouteEntry) ?session_table.ActiveSession {
         return self.sessions.preferredForPeer(route.peer_id);
     }
+
+    pub fn forwardOutbound(self: Forwarder, packet: []const u8) ?session_table.ActiveSession {
+        const route = self.lookupDestination(packet) orelse return null;
+        return self.lookupSessionForRoute(route);
+    }
 };
