@@ -12,6 +12,18 @@ For the MVP, `libvine` is intentionally narrow:
 
 `libvine` is not a replacement control plane. It uses `libmesh` extensively for discovery, signaling, route selection, session setup, and relay fallback. `libvine` owns overlay membership policy, virtual addressing, packet forwarding, and Linux TUN integration.
 
+## Identity Versus Addressing
+
+`libvine` does not treat overlay IP addresses as peer identity.
+
+- `libself` identity answers who a node is
+- `NetworkId` answers which overlay network the node belongs to
+- `VinePrefix` answers which overlay IP range the node advertises
+- `libmesh` answers which current path should be used to reach that node
+
+This separation is critical for a real VPN deployment across multiple machines: peer trust and allowlisting
+must bind to `libself` identity first, and only then to overlay addressing policy.
+
 ## Stack Position
 
 - `libself`: identity and authenticated peer metadata
