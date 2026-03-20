@@ -185,3 +185,10 @@ pub const SessionId = struct {
         return self.value == other.value;
     }
 };
+
+pub const PacketKind = enum(u8) {
+    control = 1,
+    data = 2,
+    keepalive = 3,
+    diagnostic = 4,
+};
