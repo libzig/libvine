@@ -92,6 +92,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_lib_unit_tests.step);
     test_step.dependOn(&run_vine_cli_tests.step);
     test_step.dependOn(&run_smoke_tests.step);
+    test_step.dependOn(&vine_cli.step);
 
     const examples_step = b.step("examples", "Build libvine examples");
 
