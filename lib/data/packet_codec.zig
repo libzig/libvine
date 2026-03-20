@@ -13,3 +13,13 @@ pub fn decode(packet: []const u8) VineError![]const u8 {
     if ((packet[0] >> 4) != 4) return VineError.ParseFailure;
     return packet;
 }
+
+test "packet codec accepts IPv4 payloads and rejects invalid versions" {
+    const allocator = std.testing.allocator;
+    const packet = [_]u8{ 0x45, 0x00, 0x00, 0x14 } ++ ([_]u8{0} ** 16);
+    const encoded = try encodeAlloc(allocator, &packet);
+    defer allocator.free(encoded);
+
+    try std.testing.expectEqualSlices(u8, &packet, try decode(encoded));
+    try std.testing.expectError(VineError.ParseFailure, decode(&[_]u8{ 0x60, 0x00 }));
+}
