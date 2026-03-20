@@ -118,3 +118,36 @@ pub const VinePrefix = struct {
         return out;
     }
 };
+
+pub const PeerId = struct {
+    bytes: [32]u8,
+
+    pub fn init(bytes: [32]u8) PeerId {
+        return .{ .bytes = bytes };
+    }
+
+    pub fn decode(bytes: []const u8) !PeerId {
+        if (bytes.len != 32) return error.InvalidPeerId;
+
+        var out: [32]u8 = undefined;
+        @memcpy(&out, bytes);
+        return init(out);
+    }
+
+    pub fn encode(self: PeerId) []const u8 {
+        return &self.bytes;
+    }
+
+    pub fn eql(self: PeerId, other: PeerId) bool {
+        return std.mem.eql(u8, &self.bytes, &other.bytes);
+    }
+
+    pub fn format(
+        self: PeerId,
+        comptime _: []const u8,
+        _: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        try writer.print("{}", .{std.fmt.fmtSliceHexLower(&self.bytes)});
+    }
+};
