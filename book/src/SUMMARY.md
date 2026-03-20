@@ -6,6 +6,7 @@
 - [Configuration](./configuration.md)
 - [Daemon](./daemon.md)
 - [Runtime](./runtime.md)
+- [Enrollment](./enrollment.md)
 - [Operations](./operations.md)
 - [Architecture](./architecture.md)
 - [MVP](./mvp.md)
