@@ -150,6 +150,62 @@ pub fn runCounters(args: []const []const u8, default_config_path: []const u8) !v
     try printCounters(counters);
 }
 
+pub fn runSnapshot(args: []const []const u8, default_config_path: []const u8, state_path: []const u8) !void {
+    const config_path = try parseConfigPath(args, default_config_path);
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const snapshot = try buildDiagnosticsSnapshot(allocator, config_path, state_path);
+    var runtime_cfg = try runtime.runtime_config.load(allocator, config_path);
+    defer runtime_cfg.deinit(allocator);
+    const peers = try buildPeerDiagnostics(allocator, runtime_cfg.enrolled_peers);
+    defer allocator.free(peers);
+    const routes = try buildRouteDiagnostics(allocator, runtime_cfg.enrolled_peers);
+    defer allocator.free(routes);
+    const counters = try buildCounterDiagnostics(allocator, config_path);
+
+    const managed_peers = try allocator.alloc(runtime.session_manager.ManagedPeer, runtime_cfg.enrolled_peers.len);
+    defer allocator.free(managed_peers);
+    for (runtime_cfg.enrolled_peers, 0..) |peer, i| {
+        managed_peers[i] = .{ .peer_id = peer.peer_id, .relay_capable = peer.relay_capable };
+    }
+    const session_buffer = try allocator.alloc(core.session_table.ActiveSession, @max(runtime_cfg.enrolled_peers.len, 1));
+    defer allocator.free(session_buffer);
+    for (session_buffer) |*session| session.* = .{
+        .peer_id = core.types.PeerId.init(.{0} ** core.types.peer_id_len),
+        .session_id = .{ .value = 0 },
+        .preference = .relay,
+    };
+    const candidates = try allocator.alloc(integration.libmesh_adapter.CandidatePeer, runtime_cfg.enrolled_peers.len);
+    defer allocator.free(candidates);
+    const plans = try allocator.alloc(integration.libmesh_adapter.ReachabilityPlan, runtime_cfg.enrolled_peers.len);
+    defer allocator.free(plans);
+    for (runtime_cfg.enrolled_peers, 0..) |peer, i| {
+        const candidate = integration.libmesh_adapter.CandidatePeer{
+            .peer_id = peer.peer_id,
+            .node_id = @import("libmesh").Foundation.NodeId.fromPublicKey(peer.peer_id.bytes),
+        };
+        candidates[i] = candidate;
+        plans[i] = if (peer.relay_capable and runtime_cfg.node_config.policy.allow_relay)
+            .{ .relay = candidate }
+        else if (runtime_cfg.node_config.policy.allow_signaling_upgrade)
+            .{ .signaling_then_direct = candidate }
+        else
+            .{ .direct = candidate };
+    }
+    var manager = runtime.session_manager.SessionManager.withMesh(
+        managed_peers,
+        session_buffer,
+        integration.libmesh_adapter.LibmeshAdapter.withReachability(candidates, plans),
+    );
+    _ = manager.connectConfiguredPeers();
+    const sessions_view = try buildSessionDiagnostics(allocator, managed_peers, manager);
+    defer allocator.free(sessions_view);
+
+    try printSnapshot(snapshot, peers, routes, sessions_view, counters);
+}
+
 pub fn runSessions(args: []const []const u8, default_config_path: []const u8) !void {
     const config_path = try parseConfigPath(args, default_config_path);
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -420,6 +476,23 @@ fn printCounters(counters: CounterDiagnostics) !void {
     );
 }
 
+fn printSnapshot(
+    snapshot: DiagnosticsSnapshot,
+    peers: []const PeerDiagnostics,
+    routes: []const RouteDiagnostics,
+    sessions: []const SessionDiagnostics,
+    counters: CounterDiagnostics,
+) !void {
+    try printStatus(snapshot);
+    try printPeers(peers);
+    try printRoutes(routes);
+    var buffer = std.ArrayList(u8).empty;
+    defer buffer.deinit(std.heap.page_allocator);
+    try renderSessions(buffer.writer(std.heap.page_allocator), sessions);
+    std.debug.print("{s}", .{buffer.items});
+    try printCounters(counters);
+}
+
 fn preferenceLabel(preference: core.route_table.RouteEntry.Preference) []const u8 {
     return switch (preference) {
         .direct => "direct",
@@ -641,4 +714,39 @@ test "runtime cli exposes node diagnostics counters" {
     const counters = try buildCounterDiagnostics(std.testing.allocator, config_path);
     try std.testing.expectEqual(@as(usize, 0), counters.packets_sent);
     try std.testing.expectEqual(@as(usize, 0), counters.fallback_transitions);
+}
+
+test "runtime cli snapshot combines diagnostic sections" {
+    const snapshot = DiagnosticsSnapshot{
+        .daemon_phase = .running,
+        .daemon_pid = 9,
+        .network_id = try core.types.NetworkId.init("home-net"),
+        .local_peer_id = core.types.PeerId.init(.{0x97} ** core.types.peer_id_len),
+        .local_prefix = try core.types.VinePrefix.parse("10.42.0.0/24"),
+        .peer_count = 1,
+        .bootstrap_count = 1,
+    };
+    const peers = [_]PeerDiagnostics{.{
+        .peer_id = core.types.PeerId.init(.{0x98} ** core.types.peer_id_len),
+        .prefix = try core.types.VinePrefix.parse("10.42.1.0/24"),
+        .relay_capable = true,
+    }};
+    const routes = [_]RouteDiagnostics{.{
+        .prefix = try core.types.VinePrefix.parse("10.42.1.0/24"),
+        .peer_id = peers[0].peer_id,
+        .preference = .relay,
+    }};
+    const sessions = [_]SessionDiagnostics{.{
+        .peer_id = peers[0].peer_id,
+        .session_id = .{ .value = 54 },
+        .mode = .relay,
+        .relay_capable = true,
+    }};
+    try printSnapshot(snapshot, &peers, &routes, &sessions, .{
+        .packets_sent = 0,
+        .packets_received = 0,
+        .route_misses = 0,
+        .session_failures = 0,
+        .fallback_transitions = 0,
+    });
 }
