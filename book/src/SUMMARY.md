@@ -14,6 +14,7 @@
 - [Copying To Multiple Machines](./copying-to-machines.md)
 - [Bootstrap And Relay](./bootstrap-and-relay.md)
 - [Enrollment Across Machines](./enrollment-across-machines.md)
+- [TUN Permissions](./tun-permissions.md)
 - [Operations](./operations.md)
 - [Architecture](./architecture.md)
 - [MVP](./mvp.md)
