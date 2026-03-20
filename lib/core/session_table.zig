@@ -104,3 +104,37 @@ test "session table indexes, promotion, and relay fallback work" {
     try @import("std").testing.expectEqual(@as(u64, 3), table.preferredForPeer(types.PeerId.init(.{1} ** types.peer_id_len)).?.session_id.value);
     try @import("std").testing.expectEqual(@as(u64, 1), table.fallbackToRelay(types.PeerId.init(.{1} ** types.peer_id_len)).?.session_id.value);
 }
+
+test "session table churn preserves direct preference and relay fallback" {
+    const peer = types.PeerId.init(.{0x66} ** types.peer_id_len);
+    var sessions = [_]ActiveSession{
+        .{
+            .peer_id = peer,
+            .session_id = .{ .value = 10 },
+            .preference = .relay,
+        },
+        .{
+            .peer_id = peer,
+            .session_id = .{ .value = 11 },
+            .preference = .direct_after_signaling,
+        },
+    };
+    var table = SessionTable.init(&sessions);
+
+    try @import("std").testing.expectEqual(@as(u64, 11), table.preferredForPeer(peer).?.session_id.value);
+    try @import("std").testing.expect(table.promote(.{
+        .peer_id = peer,
+        .session_id = .{ .value = 12 },
+        .preference = .direct,
+    }));
+    try @import("std").testing.expectEqual(@as(u64, 12), table.preferredForPeer(peer).?.session_id.value);
+    try @import("std").testing.expectEqual(@as(u64, 10), table.fallbackToRelay(peer).?.session_id.value);
+
+    sessions[1] = .{
+        .peer_id = peer,
+        .session_id = .{ .value = 13 },
+        .preference = .direct_after_signaling,
+    };
+    try @import("std").testing.expectEqual(@as(u64, 13), table.preferredForPeer(peer).?.session_id.value);
+    try @import("std").testing.expectEqual(@as(u64, 10), table.fallbackToRelay(peer).?.session_id.value);
+}
