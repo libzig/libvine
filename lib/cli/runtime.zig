@@ -206,6 +206,16 @@ pub fn runSnapshot(args: []const []const u8, default_config_path: []const u8, st
     try printSnapshot(snapshot, peers, routes, sessions_view, counters);
 }
 
+pub fn runPing(args: []const []const u8, default_config_path: []const u8) !void {
+    const parsed = try parsePingArgs(args, default_config_path);
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const result = try buildPingDiagnostics(allocator, parsed.config_path, parsed.destination);
+    try printPing(result);
+}
+
 pub fn runSessions(args: []const []const u8, default_config_path: []const u8) !void {
     const config_path = try parseConfigPath(args, default_config_path);
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -493,6 +503,118 @@ fn printSnapshot(
     try printCounters(counters);
 }
 
+const PingArgs = struct {
+    config_path: []const u8,
+    destination: core.types.VineAddress,
+};
+
+const PingDiagnostics = struct {
+    destination: core.types.VineAddress,
+    peer_id: core.types.PeerId,
+    session_id: core.types.SessionId,
+    mode: core.route_table.RouteEntry.Preference,
+};
+
+fn parsePingArgs(args: []const []const u8, default_config_path: []const u8) !PingArgs {
+    var config_path = default_config_path;
+    var destination: ?core.types.VineAddress = null;
+    var i: usize = 0;
+    while (i < args.len) : (i += 1) {
+        if (std.mem.eql(u8, args[i], "-c") or std.mem.eql(u8, args[i], "--config")) {
+            i += 1;
+            if (i >= args.len) return error.InvalidArguments;
+            config_path = args[i];
+            continue;
+        }
+        if (destination != null) return error.InvalidArguments;
+        destination = try core.types.VineAddress.parse(args[i]);
+    }
+    return .{
+        .config_path = config_path,
+        .destination = destination orelse return error.InvalidArguments,
+    };
+}
+
+fn buildPingDiagnostics(
+    allocator: std.mem.Allocator,
+    config_path: []const u8,
+    destination: core.types.VineAddress,
+) !PingDiagnostics {
+    var runtime_cfg = try runtime.runtime_config.load(allocator, config_path);
+    defer runtime_cfg.deinit(allocator);
+
+    const routes = try allocator.alloc(core.route_table.RouteEntry, core.types.max_route_table_entries);
+    defer allocator.free(routes);
+    const sessions = try allocator.alloc(core.session_table.ActiveSession, 32);
+    defer allocator.free(sessions);
+    const memberships = try allocator.alloc(core.membership.PeerMembership, core.types.max_prefix_count);
+    defer allocator.free(memberships);
+    const installed_routes = try allocator.alloc(@import("../linux/linux.zig").routes.InstalledRoute, runtime_cfg.enrolled_peers.len);
+    defer allocator.free(installed_routes);
+    for (installed_routes) |*route| {
+        route.* = .{
+            .prefix = runtime_cfg.local_membership.prefix,
+        };
+    }
+
+    var node = try api.node.Node.init(runtime_cfg.node_config, .{
+        .routes = routes,
+        .sessions = sessions,
+        .memberships = memberships,
+    });
+    node.start();
+    defer node.stop();
+
+    var tun_runtime = runtime.tun_runtime.TunRuntime.init(&node, installed_routes);
+    _ = tun_runtime.installConfiguredRoutes(runtime_cfg.enrolled_peers);
+    seedPingSessions(&node.session_table, runtime_cfg.enrolled_peers);
+
+    const packet = buildPingPacket(runtime_cfg.local_membership.prefix.network, destination);
+    const session = tun_runtime.dispatchPacket(&packet) orelse return error.RouteNotFound;
+    return .{
+        .destination = destination,
+        .peer_id = session.peer_id,
+        .session_id = session.session_id,
+        .mode = session.preference,
+    };
+}
+
+fn buildPingPacket(source: core.types.VineAddress, destination: core.types.VineAddress) [24]u8 {
+    return [_]u8{
+        0x45, 0x00, 0x00, 0x14,
+        0x00, 0x00, 0x00, 0x00,
+        0x40, 0x00, 0x00, 0x00,
+        source.octets[0], source.octets[1], source.octets[2], source.octets[3],
+        destination.octets[0], destination.octets[1], destination.octets[2], destination.octets[3],
+    } ++ ([_]u8{0} ** 4);
+}
+
+fn seedPingSessions(
+    table: *core.session_table.SessionTable,
+    enrolled_peers: []const runtime.enrollment.EnrollmentState.EnrolledPeer,
+) void {
+    for (enrolled_peers, 0..) |peer, i| {
+        if (i >= table.sessions.len) break;
+        table.sessions[i] = .{
+            .peer_id = peer.peer_id,
+            .session_id = .{ .value = @as(u64, 100) + i },
+            .preference = if (peer.relay_capable) .relay else .direct_after_signaling,
+        };
+    }
+}
+
+fn printPing(result: PingDiagnostics) !void {
+    std.debug.print(
+        "vine ping\ndestination={f}\npeer={f}\nsession_id={d}\nmode={s}\n",
+        .{
+            result.destination,
+            result.peer_id,
+            result.session_id.value,
+            preferenceLabel(result.mode),
+        },
+    );
+}
+
 fn preferenceLabel(preference: core.route_table.RouteEntry.Preference) []const u8 {
     return switch (preference) {
         .direct => "direct",
@@ -749,4 +871,54 @@ test "runtime cli snapshot combines diagnostic sections" {
         .session_failures = 0,
         .fallback_transitions = 0,
     });
+}
+
+test "runtime cli parses ping arguments" {
+    const parsed = try parsePingArgs(&.{ "-c", "/tmp/vine.toml", "10.42.9.7" }, "/etc/libvine/vine.toml");
+    try std.testing.expectEqualStrings("/tmp/vine.toml", parsed.config_path);
+    try std.testing.expect(parsed.destination.eql(try core.types.VineAddress.parse("10.42.9.7")));
+    try std.testing.expectError(error.InvalidArguments, parsePingArgs(&.{}, "/etc/libvine/vine.toml"));
+}
+
+test "runtime cli resolves ping destination through overlay route and session" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const root = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(root);
+    const identity_path = try std.fmt.allocPrint(std.testing.allocator, "{s}/identity", .{root});
+    defer std.testing.allocator.free(identity_path);
+    _ = try @import("../config/identity_store.zig").generateAndWrite(identity_path);
+    const remote_peer = core.types.PeerId.init(.{0xA2} ** core.types.peer_id_len);
+
+    const config_body = try std.fmt.allocPrint(
+        std.testing.allocator,
+        \\[node]
+        \\name = "alpha"
+        \\network_id = "home-net"
+        \\identity_path = "{s}"
+        \\
+        \\[tun]
+        \\name = "vine0"
+        \\address = "10.42.0.1"
+        \\prefix_len = 24
+        \\mtu = 1400
+        \\
+        \\[[allowed_peers]]
+        \\peer_id = "{f}"
+        \\prefix = "10.42.9.0/24"
+        \\relay_capable = false
+    , .{ identity_path, remote_peer });
+    defer std.testing.allocator.free(config_body);
+    try tmp.dir.writeFile(.{ .sub_path = "vine.toml", .data = config_body });
+
+    const config_path = try std.fmt.allocPrint(std.testing.allocator, "{s}/vine.toml", .{root});
+    defer std.testing.allocator.free(config_path);
+    const result = try buildPingDiagnostics(
+        std.testing.allocator,
+        config_path,
+        try core.types.VineAddress.parse("10.42.9.7"),
+    );
+    try std.testing.expect(result.peer_id.eql(remote_peer));
+    try std.testing.expectEqual(core.route_table.RouteEntry.Preference.direct_after_signaling, result.mode);
 }

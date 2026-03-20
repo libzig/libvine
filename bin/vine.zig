@@ -21,6 +21,7 @@ const Command = enum {
     sessions,
     counters,
     snapshot,
+    ping,
     diagnostics,
 };
 
@@ -78,6 +79,7 @@ fn parseCommand(arg: []const u8) ?Command {
     if (std.mem.eql(u8, arg, "sessions")) return .sessions;
     if (std.mem.eql(u8, arg, "counters")) return .counters;
     if (std.mem.eql(u8, arg, "snapshot")) return .snapshot;
+    if (std.mem.eql(u8, arg, "ping")) return .ping;
     if (std.mem.eql(u8, arg, "diagnostics")) return .diagnostics;
     return null;
 }
@@ -99,6 +101,7 @@ fn dispatch(command: Command, args: []const []const u8) !void {
         .sessions => try libvine.cli.runtime.runSessions(args, default_config_path),
         .counters => try libvine.cli.runtime.runCounters(args, default_config_path),
         .snapshot => try libvine.cli.runtime.runSnapshot(args, default_config_path, default_runtime_state_path),
+        .ping => try libvine.cli.runtime.runPing(args, default_config_path),
         .diagnostics => std.debug.print("vine diagnostics: not implemented yet\n", .{}),
     }
 }
@@ -127,6 +130,7 @@ test "top level commands parse correctly" {
     try std.testing.expectEqual(Command.sessions, parseCommand("sessions").?);
     try std.testing.expectEqual(Command.counters, parseCommand("counters").?);
     try std.testing.expectEqual(Command.snapshot, parseCommand("snapshot").?);
+    try std.testing.expectEqual(Command.ping, parseCommand("ping").?);
     try std.testing.expectEqual(Command.diagnostics, parseCommand("diagnostics").?);
 }
 
@@ -151,6 +155,7 @@ fn printHelp() !void {
         \\    sessions
         \\    counters
         \\    snapshot
+        \\    ping
         \\    diagnostics
         \\
         \\DEFAULT CONFIG:
