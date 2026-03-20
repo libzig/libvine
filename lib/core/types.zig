@@ -168,3 +168,20 @@ pub const MembershipEpoch = struct {
         return self.value == other.value;
     }
 };
+
+pub const SessionId = struct {
+    value: u64,
+
+    pub fn init(value: u64) SessionId {
+        return .{ .value = value };
+    }
+
+    pub fn next(self: SessionId) !SessionId {
+        if (self.value == std.math.maxInt(u64)) return error.InvalidSessionId;
+        return init(self.value + 1);
+    }
+
+    pub fn eql(self: SessionId, other: SessionId) bool {
+        return self.value == other.value;
+    }
+};
