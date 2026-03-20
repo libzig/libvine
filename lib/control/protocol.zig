@@ -79,6 +79,11 @@ pub const Message = union(MessageTag) {
     diagnostic_pong: DiagnosticPong,
 };
 
+pub const ValidationContext = struct {
+    network_id: types.NetworkId,
+    peer_id: ?types.PeerId = null,
+};
+
 pub fn encodeAlloc(allocator: std.mem.Allocator, message: Message) VineError![]u8 {
     var bytes = std.ArrayList(u8){};
     defer bytes.deinit(allocator);
@@ -200,6 +205,39 @@ pub fn fitsSetupMetadata(message: Message) bool {
         .hello, .join_announce => encodedLen(message) <= max_setup_metadata_len,
         else => false,
     };
+}
+
+pub fn validate(message: Message, ctx: ValidationContext) VineError!void {
+    switch (message) {
+        .hello => |m| {
+            if (!m.network_id.eql(ctx.network_id)) return VineError.NetworkMismatch;
+            if (m.version_major != protocol_version_major) return VineError.VersionMismatch;
+        },
+        .join_announce => |m| {
+            if (!m.network_id.eql(ctx.network_id)) return VineError.NetworkMismatch;
+        },
+        .route_update => |m| {
+            if (!m.network_id.eql(ctx.network_id)) return VineError.NetworkMismatch;
+            if (ctx.peer_id) |peer_id| {
+                if (!m.owner.eql(peer_id)) return VineError.PeerMismatch;
+            }
+        },
+        .route_withdraw => |m| {
+            if (!m.network_id.eql(ctx.network_id)) return VineError.NetworkMismatch;
+            if (ctx.peer_id) |peer_id| {
+                if (!m.owner.eql(peer_id)) return VineError.PeerMismatch;
+            }
+        },
+        .keepalive => |m| {
+            if (!m.network_id.eql(ctx.network_id)) return VineError.NetworkMismatch;
+        },
+        .diagnostic_ping => |m| {
+            if (!m.network_id.eql(ctx.network_id)) return VineError.NetworkMismatch;
+        },
+        .diagnostic_pong => |m| {
+            if (!m.network_id.eql(ctx.network_id)) return VineError.NetworkMismatch;
+        },
+    }
 }
 
 fn appendNetworkId(bytes: *std.ArrayList(u8), allocator: std.mem.Allocator, network_id: types.NetworkId) VineError!void {
