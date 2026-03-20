@@ -57,6 +57,7 @@ pub fn init(raw: []const u8) FileConfig {
 const Section = enum {
     root,
     node,
+    tun,
 };
 
 pub fn parse(allocator: std.mem.Allocator, raw: []const u8) (ParseError || std.mem.Allocator.Error)!FileConfig {
@@ -78,6 +79,7 @@ pub fn parse(allocator: std.mem.Allocator, raw: []const u8) (ParseError || std.m
         const key, const value = parseAssignment(trimmed) orelse return ParseError.InvalidConfig;
         switch (section) {
             .node => try applyNodeField(&cfg.node, key, value),
+            .tun => try applyTunField(&cfg.tun, key, value),
             .root => return ParseError.InvalidConfig,
         }
     }
@@ -97,6 +99,7 @@ fn isSectionHeader(line: []const u8) bool {
 
 fn parseSection(line: []const u8) ?Section {
     if (std.mem.eql(u8, line, "[node]")) return .node;
+    if (std.mem.eql(u8, line, "[tun]")) return .tun;
     return null;
 }
 
@@ -121,6 +124,27 @@ fn applyNodeField(node: *FileConfig.NodeSection, key: []const u8, value: []const
     }
     if (std.mem.eql(u8, key, "identity_path")) {
         node.identity_path = text;
+        return;
+    }
+
+    return ParseError.InvalidConfig;
+}
+
+fn applyTunField(tun: *FileConfig.TunSection, key: []const u8, value: []const u8) ParseError!void {
+    if (std.mem.eql(u8, key, "name")) {
+        tun.name = parseString(value) orelse return ParseError.InvalidConfig;
+        return;
+    }
+    if (std.mem.eql(u8, key, "address")) {
+        tun.address = parseString(value) orelse return ParseError.InvalidConfig;
+        return;
+    }
+    if (std.mem.eql(u8, key, "prefix_len")) {
+        tun.prefix_len = std.fmt.parseInt(u8, value, 10) catch return ParseError.InvalidConfig;
+        return;
+    }
+    if (std.mem.eql(u8, key, "mtu")) {
+        tun.mtu = std.fmt.parseInt(u16, value, 10) catch return ParseError.InvalidConfig;
         return;
     }
 
@@ -177,4 +201,22 @@ test "parse reads node name network id and identity path" {
     try std.testing.expectEqualStrings("alpha", cfg.node.name);
     try std.testing.expectEqualStrings("home-net", cfg.node.network_id);
     try std.testing.expectEqualStrings("/var/lib/libvine/identity", cfg.node.identity_path);
+}
+
+test "parse reads tun interface parameters" {
+    const raw =
+        \\[tun]
+        \\name = "vine0"
+        \\address = "10.42.0.1"
+        \\prefix_len = 24
+        \\mtu = 1380
+    ;
+
+    var cfg = try parse(std.testing.allocator, raw);
+    defer cfg.deinit(std.testing.allocator);
+
+    try std.testing.expectEqualStrings("vine0", cfg.tun.name);
+    try std.testing.expectEqualStrings("10.42.0.1", cfg.tun.address);
+    try std.testing.expectEqual(@as(u8, 24), cfg.tun.prefix_len);
+    try std.testing.expectEqual(@as(u16, 1380), cfg.tun.mtu);
 }
