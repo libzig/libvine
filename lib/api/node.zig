@@ -29,6 +29,7 @@ pub const Node = struct {
     tun: linux.tun.TunDevice,
     running: bool = false,
     last_bootstrap: ?BootstrapResult = null,
+    advertised_local_membership: bool = false,
 
     pub fn init(node_config: config.NodeConfig, buffers: RuntimeBuffers) !Node {
         var tun = try linux.tun.TunDevice.open();
@@ -53,6 +54,7 @@ pub const Node = struct {
 
     pub fn start(self: *Node) void {
         self.running = true;
+        _ = self.advertiseLocalMembership();
     }
 
     pub fn stop(self: *Node) void {
@@ -81,6 +83,12 @@ pub const Node = struct {
 
         self.last_bootstrap = null;
         return null;
+    }
+
+    pub fn advertiseLocalMembership(self: *Node) ?core.membership.LocalMembership {
+        const local_membership = self.local_membership orelse return null;
+        self.advertised_local_membership = true;
+        return local_membership;
     }
 };
 
@@ -184,4 +192,25 @@ test "node bootstrap prefers static peers and falls back to seed records" {
     const seed_result = seed_only_node.bootstrap().?;
     try std.testing.expectEqual(BootstrapSource.seed_records, seed_result.source);
     try std.testing.expectEqual(@as(usize, 1), seed_result.peer_count);
+}
+
+test "node start advertises local membership" {
+    var routes = [_]core.route_table.RouteEntry{};
+    var sessions = [_]core.session_table.ActiveSession{};
+
+    var node = try Node.init(.{
+        .network_id = try core.types.NetworkId.init("devnet"),
+        .tun = .{
+            .ifname = [_]u8{ 'v', 'n', '5', 0 } ++ ([_]u8{0} ** 12),
+            .local_address = core.types.VineAddress.init(.{ 10, 64, 0, 1 }),
+            .prefix_len = 24,
+        },
+    }, .{
+        .routes = &routes,
+        .sessions = &sessions,
+    });
+
+    node.start();
+    try std.testing.expect(node.advertised_local_membership);
+    try std.testing.expect(node.advertiseLocalMembership() != null);
 }
