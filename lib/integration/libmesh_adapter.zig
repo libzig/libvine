@@ -90,3 +90,63 @@ pub const LibmeshAdapter = struct {
         return self.connectPeer(peer_id);
     }
 };
+
+test "libmesh adapter resolves direct, signaling, and relay plans" {
+    const node_direct = libmesh.Foundation.NodeId.fromPublicKey([_]u8{0x10} ** 32);
+    const node_signaling = libmesh.Foundation.NodeId.fromPublicKey([_]u8{0x20} ** 32);
+    const node_relay = libmesh.Foundation.NodeId.fromPublicKey([_]u8{0x30} ** 32);
+
+    const direct_peer = CandidatePeer{
+        .peer_id = types.PeerId.init(node_direct.toBytes()),
+        .node_id = node_direct,
+    };
+    const signaling_peer = CandidatePeer{
+        .peer_id = types.PeerId.init(node_signaling.toBytes()),
+        .node_id = node_signaling,
+    };
+    const relay_peer = CandidatePeer{
+        .peer_id = types.PeerId.init(node_relay.toBytes()),
+        .node_id = node_relay,
+    };
+
+    const adapter = LibmeshAdapter.withReachability(
+        &.{ direct_peer, signaling_peer, relay_peer },
+        &.{
+            .{ .direct = direct_peer },
+            .{ .signaling_then_direct = signaling_peer },
+            .{ .relay = relay_peer },
+        },
+    );
+
+    try @import("std").testing.expect(adapter.resolvePeerByIdentity(direct_peer.peer_id) != null);
+    try @import("std").testing.expectEqual(
+        ReachabilityPlan.Mode.direct,
+        adapter.resolveReachability(direct_peer.peer_id).?.mode(),
+    );
+    try @import("std").testing.expectEqual(
+        ReachabilityPlan.Mode.signaling_then_direct,
+        adapter.resolveReachability(signaling_peer.peer_id).?.mode(),
+    );
+    try @import("std").testing.expectEqual(
+        ReachabilityPlan.Mode.relay,
+        adapter.resolveReachability(relay_peer.peer_id).?.mode(),
+    );
+}
+
+test "libmesh adapter opens sessions from reachability plans" {
+    const node_relay = libmesh.Foundation.NodeId.fromPublicKey([_]u8{0x44} ** 32);
+    const relay_peer = CandidatePeer{
+        .peer_id = types.PeerId.init(node_relay.toBytes()),
+        .node_id = node_relay,
+    };
+
+    const adapter = LibmeshAdapter.withReachability(
+        &.{relay_peer},
+        &.{.{ .relay = relay_peer }},
+    );
+
+    const session = adapter.openSession(relay_peer.peer_id).?;
+    try @import("std").testing.expect(session.peer_id.eql(relay_peer.peer_id));
+    try @import("std").testing.expectEqual(@as(u64, 1), session.session_id.value);
+    try @import("std").testing.expectEqual(ReachabilityPlan.Mode.relay, session.plan.mode());
+}
