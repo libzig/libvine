@@ -217,3 +217,20 @@ test "identity store binds peer id directly from persisted libself material" {
     try std.testing.expect(bound.peer_id.eql(stored.bound.peer_id));
     try std.testing.expectEqualSlices(u8, &bound.key_pair.public_key, &stored.bound.key_pair.public_key);
 }
+
+test "identity lifecycle keeps peer id and fingerprint stable across reload" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const tmp_path = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(tmp_path);
+    const full_path = try std.fmt.allocPrint(std.testing.allocator, "{s}/stable.identity", .{tmp_path});
+    defer std.testing.allocator.free(full_path);
+
+    const created = try generateAndWrite(full_path);
+    const reloaded = try readFile(std.testing.allocator, full_path);
+
+    try std.testing.expect(created.bound.peer_id.eql(reloaded.bound.peer_id));
+    try std.testing.expectEqualSlices(u8, &created.bound.node_id.toBytes(), &reloaded.bound.node_id.toBytes());
+    try std.testing.expectEqualSlices(u8, &created.bound.node_id.toHex(), &reloaded.bound.node_id.toHex());
+}
