@@ -59,6 +59,7 @@ const Section = enum {
     node,
     tun,
     bootstrap_peers,
+    allowed_peers,
 };
 
 pub fn parse(allocator: std.mem.Allocator, raw: []const u8) (ParseError || std.mem.Allocator.Error)!FileConfig {
@@ -66,6 +67,8 @@ pub fn parse(allocator: std.mem.Allocator, raw: []const u8) (ParseError || std.m
     var section: Section = .root;
     var bootstrap_peers = try std.ArrayList(FileConfig.BootstrapPeer).initCapacity(allocator, 0);
     errdefer bootstrap_peers.deinit(allocator);
+    var allowed_peers = try std.ArrayList(FileConfig.AllowedPeer).initCapacity(allocator, 0);
+    errdefer allowed_peers.deinit(allocator);
 
     var lines = std.mem.splitScalar(u8, raw, '\n');
     while (lines.next()) |line| {
@@ -76,6 +79,7 @@ pub fn parse(allocator: std.mem.Allocator, raw: []const u8) (ParseError || std.m
             section = parseSection(trimmed) orelse return ParseError.InvalidConfig;
             switch (section) {
                 .bootstrap_peers => try bootstrap_peers.append(allocator, .{}),
+                .allowed_peers => try allowed_peers.append(allocator, .{}),
                 else => {},
             }
             continue;
@@ -89,11 +93,16 @@ pub fn parse(allocator: std.mem.Allocator, raw: []const u8) (ParseError || std.m
                 if (bootstrap_peers.items.len == 0) return ParseError.InvalidConfig;
                 try applyBootstrapPeerField(&bootstrap_peers.items[bootstrap_peers.items.len - 1], key, value);
             },
+            .allowed_peers => {
+                if (allowed_peers.items.len == 0) return ParseError.InvalidConfig;
+                try applyAllowedPeerField(&allowed_peers.items[allowed_peers.items.len - 1], key, value);
+            },
             .root => return ParseError.InvalidConfig,
         }
     }
 
     cfg.bootstrap_peers = try bootstrap_peers.toOwnedSlice(allocator);
+    cfg.allowed_peers = try allowed_peers.toOwnedSlice(allocator);
     return cfg;
 }
 
@@ -111,6 +120,7 @@ fn parseSection(line: []const u8) ?Section {
     if (std.mem.eql(u8, line, "[node]")) return .node;
     if (std.mem.eql(u8, line, "[tun]")) return .tun;
     if (std.mem.eql(u8, line, "[[bootstrap_peers]]")) return .bootstrap_peers;
+    if (std.mem.eql(u8, line, "[[allowed_peers]]")) return .allowed_peers;
     return null;
 }
 
@@ -171,6 +181,21 @@ fn applyBootstrapPeerField(peer: *FileConfig.BootstrapPeer, key: []const u8, val
     }
     if (std.mem.eql(u8, key, "address")) {
         peer.address = text;
+        return;
+    }
+
+    return ParseError.InvalidConfig;
+}
+
+fn applyAllowedPeerField(peer: *FileConfig.AllowedPeer, key: []const u8, value: []const u8) ParseError!void {
+    const text = parseString(value) orelse return ParseError.InvalidConfig;
+
+    if (std.mem.eql(u8, key, "peer_id")) {
+        peer.peer_id = text;
+        return;
+    }
+    if (std.mem.eql(u8, key, "prefix")) {
+        peer.prefix = text;
         return;
     }
 
@@ -264,4 +289,24 @@ test "parse reads bootstrap peer records" {
     try std.testing.expectEqual(@as(usize, 2), cfg.bootstrap_peers.len);
     try std.testing.expectEqualStrings("peer-a", cfg.bootstrap_peers[0].peer_id);
     try std.testing.expectEqualStrings("udp://198.51.100.11:4100", cfg.bootstrap_peers[1].address);
+}
+
+test "parse reads allowed peer records with prefix ownership" {
+    const raw =
+        \\[[allowed_peers]]
+        \\peer_id = "peer-a"
+        \\prefix = "10.42.1.0/24"
+        \\
+        \\[[allowed_peers]]
+        \\peer_id = "peer-b"
+        \\prefix = "10.42.2.0/24"
+    ;
+
+    var cfg = try parse(std.testing.allocator, raw);
+    defer cfg.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(@as(usize, 2), cfg.allowed_peers.len);
+    try std.testing.expectEqualStrings("peer-a", cfg.allowed_peers[0].peer_id);
+    try std.testing.expectEqualStrings("10.42.2.0/24", cfg.allowed_peers[1].prefix);
+    try std.testing.expect(!cfg.allowed_peers[0].relay_capable);
 }
