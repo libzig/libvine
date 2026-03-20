@@ -76,8 +76,12 @@ pub fn rejectWrongOverlay(local: SessionMetadata, remote: SessionMetadata) VineE
     if (!local.network_id.eql(remote.network_id)) return VineError.NetworkMismatch;
 }
 
+pub fn isCompatibleMajorVersion(local: SessionMetadata, remote: SessionMetadata) bool {
+    return local.transport_version_major == remote.transport_version_major;
+}
+
 pub fn rejectIncompatibleMajorVersion(local: SessionMetadata, remote: SessionMetadata) VineError!void {
-    if (local.transport_version_major != remote.transport_version_major) return VineError.VersionMismatch;
+    if (!isCompatibleMajorVersion(local, remote)) return VineError.VersionMismatch;
 }
 
 fn appendU16(bytes: *std.ArrayList(u8), allocator: std.mem.Allocator, value: u16) !void {
