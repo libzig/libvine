@@ -50,31 +50,31 @@ fn handleInit(args: []const []const u8, default_identity_path: []const u8) !void
 fn handleShow(args: []const []const u8, default_identity_path: []const u8) !void {
     const identity_path = try parseIdentityPath(args, default_identity_path);
 
-    const stored = try identity_store.readFile(std.heap.page_allocator, identity_path);
+    const bound = try identity_store.loadBoundIdentity(std.heap.page_allocator, identity_path);
     std.debug.print("identity_path={s}\npeer_id={f}\nfingerprint={s}\n", .{
         identity_path,
-        stored.bound.peer_id,
-        stored.bound.node_id.toHex(),
+        bound.peer_id,
+        bound.node_id.toHex(),
     });
 }
 
 fn handleExportPublic(args: []const []const u8, default_identity_path: []const u8) !void {
     const identity_path = try parseIdentityPath(args, default_identity_path);
-    const stored = try identity_store.readFile(std.heap.page_allocator, identity_path);
-    const did = try libself.DidKey.fromKeyPair(stored.bound.key_pair).encode(std.heap.page_allocator);
+    const bound = try identity_store.loadBoundIdentity(std.heap.page_allocator, identity_path);
+    const did = try libself.DidKey.fromKeyPair(bound.key_pair).encode(std.heap.page_allocator);
     defer std.heap.page_allocator.free(did);
 
     std.debug.print("peer_id={f}\ndid={s}\npublic_key={s}\n", .{
-        stored.bound.peer_id,
+        bound.peer_id,
         did,
-        std.fmt.bytesToHex(stored.bound.key_pair.public_key, .lower),
+        std.fmt.bytesToHex(bound.key_pair.public_key, .lower),
     });
 }
 
 fn handleFingerprint(args: []const []const u8, default_identity_path: []const u8) !void {
     const identity_path = try parseIdentityPath(args, default_identity_path);
-    const stored = try identity_store.readFile(std.heap.page_allocator, identity_path);
-    std.debug.print("{s}\n", .{stored.bound.node_id.toHex()});
+    const bound = try identity_store.loadBoundIdentity(std.heap.page_allocator, identity_path);
+    std.debug.print("{s}\n", .{bound.node_id.toHex()});
 }
 
 fn parseIdentityPath(args: []const []const u8, default_identity_path: []const u8) ![]const u8 {

@@ -112,6 +112,10 @@ pub fn readFile(allocator: std.mem.Allocator, path: []const u8) StoreError!Store
     return decode(data);
 }
 
+pub fn loadBoundIdentity(allocator: std.mem.Allocator, path: []const u8) StoreError!identity_adapter.BoundIdentity {
+    return (try readFile(allocator, path)).bound;
+}
+
 fn parseHex32(text: []const u8) StoreError![32]u8 {
     if (text.len != 64) return StoreError.InvalidIdentityFile;
 
@@ -195,4 +199,21 @@ test "identity store rejects missing and malformed files" {
     defer std.testing.allocator.free(full_path);
 
     try std.testing.expectError(StoreError.InvalidIdentityFile, readFile(std.testing.allocator, full_path));
+}
+
+test "identity store binds peer id directly from persisted libself material" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const tmp_path = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(tmp_path);
+    const full_path = try std.fmt.allocPrint(std.testing.allocator, "{s}/identity.txt", .{tmp_path});
+    defer std.testing.allocator.free(full_path);
+
+    const stored = try fromSeed([_]u8{0x33} ** 32);
+    try writeFile(full_path, stored);
+
+    const bound = try loadBoundIdentity(std.testing.allocator, full_path);
+    try std.testing.expect(bound.peer_id.eql(stored.bound.peer_id));
+    try std.testing.expectEqualSlices(u8, &bound.key_pair.public_key, &stored.bound.key_pair.public_key);
 }
