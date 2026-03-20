@@ -373,3 +373,71 @@ test "parse reads policy toggles" {
     try std.testing.expect(!cfg.policy.allow_relay);
     try std.testing.expect(!cfg.policy.allow_signaling_upgrade);
 }
+
+test "parse accepts a complete operator config file" {
+    const raw =
+        \\[node]
+        \\name = "alpha"
+        \\network_id = "home-net"
+        \\identity_path = "/var/lib/libvine/identity"
+        \\
+        \\[tun]
+        \\name = "vine0"
+        \\address = "10.42.0.1"
+        \\prefix_len = 24
+        \\mtu = 1400
+        \\
+        \\[[bootstrap_peers]]
+        \\peer_id = "seed-a"
+        \\address = "udp://198.51.100.10:4100"
+        \\
+        \\[[allowed_peers]]
+        \\peer_id = "relay-a"
+        \\prefix = "10.42.254.0/24"
+        \\relay_capable = true
+        \\
+        \\[policy]
+        \\strict_allowlist = true
+        \\allow_relay = true
+        \\allow_signaling_upgrade = false
+    ;
+
+    var cfg = try parse(std.testing.allocator, raw);
+    defer cfg.deinit(std.testing.allocator);
+
+    try std.testing.expectEqualStrings("alpha", cfg.node.name);
+    try std.testing.expectEqualStrings("vine0", cfg.tun.name);
+    try std.testing.expectEqual(@as(usize, 1), cfg.bootstrap_peers.len);
+    try std.testing.expectEqual(@as(usize, 1), cfg.allowed_peers.len);
+    try std.testing.expect(cfg.allowed_peers[0].relay_capable);
+    try std.testing.expect(!cfg.policy.allow_signaling_upgrade);
+}
+
+test "parse rejects malformed config input" {
+    try std.testing.expectError(
+        ParseError.InvalidConfig,
+        parse(
+            std.testing.allocator,
+            \\[node]
+            \\network_id "missing equals"
+        ),
+    );
+
+    try std.testing.expectError(
+        ParseError.InvalidConfig,
+        parse(
+            std.testing.allocator,
+            \\[policy]
+            \\allow_relay = maybe
+        ),
+    );
+
+    try std.testing.expectError(
+        ParseError.InvalidConfig,
+        parse(
+            std.testing.allocator,
+            \\[unknown]
+            \\value = "nope"
+        ),
+    );
+}
