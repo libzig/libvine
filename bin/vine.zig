@@ -82,7 +82,7 @@ fn dispatch(command: Command, args: []const []const u8) !void {
             .log_path = default_log_path,
         }),
         .up => try libvine.cli.runtime.runUp(args, default_config_path),
-        .down => std.debug.print("vine down: not implemented yet\n", .{}),
+        .down => try libvine.cli.runtime.runDown(args, default_pidfile_path),
         .status => std.debug.print("vine status: not implemented yet\n", .{}),
         .diagnostics => std.debug.print("vine diagnostics: not implemented yet\n", .{}),
     }

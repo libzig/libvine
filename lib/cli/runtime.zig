@@ -1,6 +1,7 @@
 const std = @import("std");
 const api = @import("../api/api.zig");
 const core = @import("../core/core.zig");
+const daemon = @import("../daemon/runtime.zig");
 const runtime = @import("../runtime/runtime.zig");
 
 pub fn runUp(args: []const []const u8, default_config_path: []const u8) !void {
@@ -40,6 +41,29 @@ pub fn runUp(args: []const []const u8, default_config_path: []const u8) !void {
     );
 }
 
+pub fn runDown(args: []const []const u8, pidfile_path: []const u8) !void {
+    if (args.len != 0) return error.InvalidArguments;
+
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const pid = daemon.readPidFile(allocator, pidfile_path) catch {
+        std.debug.print("vine down\nphase=stopped\n", .{});
+        return;
+    };
+
+    daemon.requestShutdown(pid) catch |err| switch (err) {
+        error.ProcessNotFound => {},
+        else => return err,
+    };
+    std.fs.deleteFileAbsolute(pidfile_path) catch |err| switch (err) {
+        error.FileNotFound => {},
+        else => return err,
+    };
+    std.debug.print("vine down\npid={d}\n", .{pid});
+}
+
 fn parseConfigPath(args: []const []const u8, default_config_path: []const u8) ![]const u8 {
     var config_path = default_config_path;
     var i: usize = 0;
@@ -64,4 +88,8 @@ test "runtime cli up config path defaults and overrides" {
         "/tmp/vine.toml",
         try parseConfigPath(&.{ "-c", "/tmp/vine.toml" }, "/etc/libvine/vine.toml"),
     );
+}
+
+test "runtime cli down rejects unexpected arguments" {
+    try std.testing.expectError(error.InvalidArguments, runDown(&.{ "--now" }, "/run/libvine/vine.pid"));
 }
