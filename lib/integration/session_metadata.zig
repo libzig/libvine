@@ -32,7 +32,53 @@ pub fn encodeAlloc(allocator: std.mem.Allocator, metadata: SessionMetadata) Vine
     return bytes.toOwnedSlice(allocator) catch return VineError.MessageTooLarge;
 }
 
+pub fn decode(data: []const u8) VineError!SessionMetadata {
+    var cursor: usize = 0;
+    if (data.len < 11) return VineError.InvalidControlMessage;
+
+    const network_id_len = data[cursor];
+    cursor += 1;
+    if (cursor + network_id_len > data.len) return VineError.InvalidControlMessage;
+    const network_id = try types.NetworkId.decode(data[cursor .. cursor + network_id_len]);
+    cursor += network_id_len;
+
+    if (cursor + 5 > data.len) return VineError.InvalidControlMessage;
+    const prefix = try types.VinePrefix.init(types.VineAddress.init(.{
+        data[cursor],
+        data[cursor + 1],
+        data[cursor + 2],
+        data[cursor + 3],
+    }), data[cursor + 4]);
+    cursor += 5;
+
+    const version_major = try readU16(data, &cursor);
+    const version_minor = try readU16(data, &cursor);
+    if (cursor >= data.len) return VineError.InvalidControlMessage;
+    const features: FeatureFlags = @bitCast(data[cursor]);
+    cursor += 1;
+    if (cursor != data.len) return VineError.InvalidControlMessage;
+
+    return .{
+        .network_id = network_id,
+        .prefix = prefix,
+        .transport_version_major = version_major,
+        .transport_version_minor = version_minor,
+        .features = features,
+    };
+}
+
+pub fn validateCompatibility(local: SessionMetadata, remote: SessionMetadata) VineError!void {
+    if (!local.network_id.eql(remote.network_id)) return VineError.NetworkMismatch;
+    if (local.transport_version_major != remote.transport_version_major) return VineError.VersionMismatch;
+}
+
 fn appendU16(bytes: *std.ArrayList(u8), allocator: std.mem.Allocator, value: u16) !void {
     try bytes.append(allocator, @intCast(value & 0xff));
     try bytes.append(allocator, @intCast((value >> 8) & 0xff));
+}
+
+fn readU16(data: []const u8, cursor: *usize) VineError!u16 {
+    if (cursor.* + 2 > data.len) return VineError.InvalidControlMessage;
+    defer cursor.* += 2;
+    return @as(u16, data[cursor.*]) | (@as(u16, data[cursor.* + 1]) << 8);
 }
