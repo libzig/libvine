@@ -197,3 +197,46 @@ test "daemon stop removes an existing pidfile" {
 
     try std.testing.expectError(error.FileNotFound, std.fs.openFileAbsolute(pidfile_path, .{}));
 }
+
+test "daemon lifecycle preserves status artifacts across start and stop phases" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const dir_path = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(dir_path);
+    const pidfile_path = try std.fmt.allocPrint(std.testing.allocator, "{s}/run/vine.pid", .{dir_path});
+    defer std.testing.allocator.free(pidfile_path);
+    const state_path = try std.fmt.allocPrint(std.testing.allocator, "{s}/run/state.txt", .{dir_path});
+    defer std.testing.allocator.free(state_path);
+
+    var runtime = daemon_runtime.init(.{
+        .pidfile_path = pidfile_path,
+        .state_path = state_path,
+        .log_path = "/var/log/libvine/vine.log",
+    });
+    try runtime.runForeground("/etc/libvine/vine.toml");
+    runtime.pid = std.math.maxInt(std.process.Child.Id);
+    try runtime.writePidFile(std.testing.allocator);
+    try runtime.writeStateFile(std.testing.allocator);
+
+    {
+        var snapshot = try daemon_runtime.readStateFile(std.testing.allocator, state_path);
+        defer daemon_runtime.deinitSnapshot(std.testing.allocator, &snapshot);
+        try std.testing.expectEqual(daemon_runtime.DaemonPhase.running, snapshot.phase);
+    }
+
+    try handleStop(&.{}, .{
+        .pidfile_path = pidfile_path,
+        .state_path = state_path,
+        .log_path = "/var/log/libvine/vine.log",
+    });
+
+    try runtime.stop();
+    try runtime.writeStateFile(std.testing.allocator);
+
+    {
+        var snapshot = try daemon_runtime.readStateFile(std.testing.allocator, state_path);
+        defer daemon_runtime.deinitSnapshot(std.testing.allocator, &snapshot);
+        try std.testing.expectEqual(daemon_runtime.DaemonPhase.stopped, snapshot.phase);
+    }
+}
