@@ -58,3 +58,36 @@ pub fn mapOpenError(errno: u16) VineError {
         else => VineError.LinuxUnavailable,
     };
 }
+
+test "tun open error mapping and configuration work" {
+    try @import("std").testing.expectEqual(VineError.LinuxUnavailable, mapOpenError(2));
+    try @import("std").testing.expectEqual(VineError.LinuxPermissionDenied, mapOpenError(13));
+
+    var device = try TunDevice.open();
+    var ifreq = IfReq{};
+    ifreq.name[0] = 'v';
+    ifreq.name[1] = 'n';
+    ifreq.flags = IFF_TUN | IFF_NO_PI;
+    device.configure(ifreq);
+    try @import("std").testing.expectEqual(@as(u8, 'v'), device.ifname[0]);
+
+    const config = TunConfig{
+        .ifname = ifreq.name,
+        .local_address = types.VineAddress.init(.{ 10, 1, 0, 1 }),
+        .prefix_len = 24,
+        .mtu = 1400,
+    };
+    device.applyConfig(config);
+    try @import("std").testing.expectEqual(@as(u16, 1400), device.config.?.mtu);
+}
+
+test "tun read and write buffers are testable" {
+    var device = try TunDevice.open();
+    const packet = [_]u8{ 0x45, 0x00, 0x00, 0x14 } ++ ([_]u8{0} ** 16);
+    device.loadReadBuffer(&packet);
+    try @import("std").testing.expectEqualSlices(u8, &packet, device.readPacket().?);
+    try @import("std").testing.expect(device.readPacket() == null);
+
+    device.writePacket(&packet);
+    try @import("std").testing.expectEqualSlices(u8, &packet, device.tx_buffer);
+}

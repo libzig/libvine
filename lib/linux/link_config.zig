@@ -15,3 +15,13 @@ pub fn assignAddress(state: *LinkState, address: types.VineAddress, prefix_len: 
 pub fn bringUp(state: *LinkState) void {
     state.up = true;
 }
+
+test "link config assigns address and marks interface up" {
+    var state = LinkState{};
+    assignAddress(&state, types.VineAddress.init(.{ 10, 1, 0, 1 }), 24);
+    bringUp(&state);
+
+    try @import("std").testing.expect(state.address.?.eql(types.VineAddress.init(.{ 10, 1, 0, 1 })));
+    try @import("std").testing.expectEqual(@as(u8, 24), state.prefix_len.?);
+    try @import("std").testing.expect(state.up);
+}
