@@ -1,1 +1,15 @@
-pub const placeholder = struct {};
+const types = @import("../core/types.zig");
+
+pub const CapabilityFlags = packed struct(u8) {
+    relay_capable: bool = false,
+    direct_capable: bool = true,
+    diagnostic_capable: bool = false,
+    reserved: u5 = 0,
+};
+
+pub const Hello = struct {
+    network_id: types.NetworkId,
+    version_major: u16,
+    version_minor: u16,
+    capabilities: CapabilityFlags = .{},
+};
