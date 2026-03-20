@@ -46,6 +46,10 @@ pub const SessionManager = struct {
         return connected;
     }
 
+    pub fn directSessionCount(self: SessionManager) usize {
+        return countByPreference(self, .direct);
+    }
+
     fn putSession(self: *SessionManager, session: core.session_table.ActiveSession) bool {
         for (self.sessions.sessions) |*existing| {
             if (existing.peer_id.eql(session.peer_id) and existing.preference == session.preference) {
@@ -68,6 +72,15 @@ pub const SessionManager = struct {
             .signaling_then_direct => .direct_after_signaling,
             .relay => .relay,
         };
+    }
+
+    fn countByPreference(self: SessionManager, preference: core.route_table.RouteEntry.Preference) usize {
+        var count: usize = 0;
+        for (self.sessions.sessions) |session| {
+            if (session.session_id.value == 0) continue;
+            if (session.preference == preference) count += 1;
+        }
+        return count;
     }
 };
 
@@ -126,4 +139,43 @@ test "session manager connects configured peers using mesh reachability" {
         core.route_table.RouteEntry.Preference.direct,
         manager.sessions.preferredForPeer(peer.peer_id).?.preference,
     );
+}
+
+test "session manager tracks direct sessions" {
+    const libmesh = @import("libmesh");
+    const direct_node = libmesh.Foundation.NodeId.fromPublicKey([_]u8{0x75} ** 32);
+    const direct_peer = ManagedPeer{
+        .peer_id = core.types.PeerId.init(direct_node.toBytes()),
+    };
+    var sessions = [_]core.session_table.ActiveSession{
+        .{
+            .peer_id = core.types.PeerId.init(.{0} ** core.types.peer_id_len),
+            .session_id = .{ .value = 0 },
+            .preference = .relay,
+        },
+        .{
+            .peer_id = core.types.PeerId.init(.{0} ** core.types.peer_id_len),
+            .session_id = .{ .value = 0 },
+            .preference = .relay,
+        },
+    };
+    var manager = SessionManager.withMesh(
+        &.{direct_peer},
+        &sessions,
+        integration.libmesh_adapter.LibmeshAdapter.withReachability(
+            &.{.{
+                .peer_id = direct_peer.peer_id,
+                .node_id = direct_node,
+            }},
+            &.{.{
+                .direct = .{
+                    .peer_id = direct_peer.peer_id,
+                    .node_id = direct_node,
+                },
+            }},
+        ),
+    );
+
+    _ = manager.connectConfiguredPeers();
+    try @import("std").testing.expectEqual(@as(usize, 1), manager.directSessionCount());
 }
