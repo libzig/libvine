@@ -556,3 +556,95 @@ test "tun runtime downgrades or detaches routes during stale session cleanup" {
     try std.testing.expect(runtime.node.route_table.entries[1].tombstone);
     try std.testing.expect(!runtime.installed_routes[1].active);
 }
+
+test "tun runtime fake transport carries packets between nodes end to end" {
+    const std = @import("std");
+
+    const alpha_peer = core.types.PeerId.init(.{0xA1} ** core.types.peer_id_len);
+    const beta_peer = core.types.PeerId.init(.{0xB2} ** core.types.peer_id_len);
+
+    var alpha_routes = [_]core.route_table.RouteEntry{
+        .{
+            .prefix = try core.types.VinePrefix.parse("10.42.1.0/24"),
+            .peer_id = beta_peer,
+            .session_id = .{ .value = 101 },
+            .epoch = .{ .value = 1 },
+            .preference = .direct,
+        },
+    };
+    var beta_routes = [_]core.route_table.RouteEntry{
+        .{
+            .prefix = try core.types.VinePrefix.parse("10.42.0.0/24"),
+            .peer_id = alpha_peer,
+            .session_id = .{ .value = 201 },
+            .epoch = .{ .value = 1 },
+            .preference = .direct,
+        },
+    };
+    var alpha_sessions = [_]core.session_table.ActiveSession{
+        .{ .peer_id = beta_peer, .session_id = .{ .value = 101 }, .preference = .direct },
+    };
+    var beta_sessions = [_]core.session_table.ActiveSession{
+        .{ .peer_id = alpha_peer, .session_id = .{ .value = 201 }, .preference = .direct },
+    };
+    var alpha_memberships = [_]core.membership.PeerMembership{};
+    var beta_memberships = [_]core.membership.PeerMembership{};
+    var alpha_installed = [_]linux.routes.InstalledRoute{};
+    var beta_installed = [_]linux.routes.InstalledRoute{};
+
+    var alpha_node = try api.node.Node.init(.{
+        .network_id = try core.types.NetworkId.init("home-net"),
+        .local_peer_id = alpha_peer,
+        .tun = .{
+            .ifname = [_]u8{ 'v', 'a', '0', 0 } ++ ([_]u8{0} ** 12),
+            .local_address = try core.types.VineAddress.parse("10.42.0.1"),
+            .prefix_len = 24,
+            .mtu = 1400,
+        },
+        .allowlist = &.{beta_peer},
+    }, .{
+        .routes = &alpha_routes,
+        .sessions = &alpha_sessions,
+        .memberships = &alpha_memberships,
+    });
+    var beta_node = try api.node.Node.init(.{
+        .network_id = try core.types.NetworkId.init("home-net"),
+        .local_peer_id = beta_peer,
+        .tun = .{
+            .ifname = [_]u8{ 'v', 'b', '0', 0 } ++ ([_]u8{0} ** 12),
+            .local_address = try core.types.VineAddress.parse("10.42.1.1"),
+            .prefix_len = 24,
+            .mtu = 1400,
+        },
+        .allowlist = &.{alpha_peer},
+    }, .{
+        .routes = &beta_routes,
+        .sessions = &beta_sessions,
+        .memberships = &beta_memberships,
+    });
+
+    var alpha = TunRuntime.init(&alpha_node, &alpha_installed);
+    var beta = TunRuntime.init(&beta_node, &beta_installed);
+
+    const outbound = [_]u8{
+        0x45, 0x00, 0x00, 0x14,
+        0x00, 0x00, 0x00, 0x00,
+        0x40, 0x00, 0x00, 0x00,
+        10, 42, 0, 7,
+        10, 42, 1, 9,
+    } ++ ([_]u8{0} ** 4);
+    try std.testing.expectEqual(@as(u64, 101), alpha.dispatchPacket(&outbound).?.session_id.value);
+    try std.testing.expect(beta.receivePacketFromSession(alpha_peer, alpha.last_sent_packet));
+    try std.testing.expectEqualSlices(u8, &outbound, beta.node.tun.tx_buffer);
+
+    const reply = [_]u8{
+        0x45, 0x00, 0x00, 0x14,
+        0x00, 0x00, 0x00, 0x00,
+        0x40, 0x00, 0x00, 0x00,
+        10, 42, 1, 9,
+        10, 42, 0, 7,
+    } ++ ([_]u8{0} ** 4);
+    try std.testing.expectEqual(@as(u64, 201), beta.dispatchPacket(&reply).?.session_id.value);
+    try std.testing.expect(alpha.receivePacketFromSession(beta_peer, beta.last_sent_packet));
+    try std.testing.expectEqualSlices(u8, &reply, alpha.node.tun.tx_buffer);
+}
