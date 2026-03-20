@@ -22,6 +22,10 @@ pub const EnrollmentState = struct {
         }
         return null;
     }
+
+    pub fn advertiseLocalMembership(self: EnrollmentState) core.membership.LocalMembership {
+        return self.local_membership;
+    }
 };
 
 test "enrollment state captures local membership and admission policy" {
@@ -87,4 +91,23 @@ test "enrollment state binds one configured prefix per allowed peer" {
     try std.testing.expect(state.ownedPrefixFor(peer_b) != null);
     try std.testing.expect(state.ownedPrefixFor(peer_b).?.contains(core.types.VineAddress.init(.{ 10, 42, 1, 99 })));
     try std.testing.expect(state.ownedPrefixFor(peer_a) == null);
+}
+
+test "enrollment state advertises local membership on startup" {
+    const peer = core.types.PeerId.init(.{0x33} ** core.types.peer_id_len);
+    const state = EnrollmentState{
+        .local_membership = .{
+            .network_id = try core.types.NetworkId.init("devnet"),
+            .peer_id = peer,
+            .prefix = try core.types.VinePrefix.parse("10.42.0.0/24"),
+            .epoch = core.types.MembershipEpoch.init(1),
+            .attached_at_ms = 0,
+        },
+        .admission_policy = .{ .allowed_peers = &.{peer} },
+        .enrolled_peers = &.{},
+    };
+
+    const advertised = state.advertiseLocalMembership();
+    try std.testing.expect(advertised.peer_id.eql(peer));
+    try std.testing.expect(advertised.prefix.contains(core.types.VineAddress.init(.{ 10, 42, 0, 9 })));
 }

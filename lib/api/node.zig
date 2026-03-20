@@ -3,6 +3,7 @@ const config = @import("config.zig");
 const core = @import("../core/core.zig");
 const integration = @import("../integration/integration.zig");
 const linux = @import("../linux/linux.zig");
+const enrollment = @import("../runtime/enrollment.zig");
 
 pub const RuntimeBuffers = struct {
     routes: []core.route_table.RouteEntry,
@@ -126,8 +127,13 @@ pub const Node = struct {
 
     pub fn advertiseLocalMembership(self: *Node) ?core.membership.LocalMembership {
         const local_membership = self.local_membership orelse return null;
+        const state = enrollment.EnrollmentState{
+            .local_membership = local_membership,
+            .admission_policy = .{ .allowed_peers = self.config.allowlist },
+            .enrolled_peers = &.{},
+        };
         self.advertised_local_membership = true;
-        return local_membership;
+        return state.advertiseLocalMembership();
     }
 
     pub fn setEventCallback(self: *Node, callback: EventCallback, context: ?*anyopaque) void {
