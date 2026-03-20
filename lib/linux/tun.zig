@@ -13,6 +13,7 @@ pub const TunDevice = struct {
     ifname: [16]u8 = [_]u8{0} ** 16,
     config: ?TunConfig = null,
     rx_buffer: []const u8 = &.{},
+    tx_buffer: []const u8 = &.{},
 
     pub fn open() VineError!TunDevice {
         return .{ .fd = 1 };
@@ -35,6 +36,10 @@ pub const TunDevice = struct {
         if (self.rx_buffer.len == 0) return null;
         defer self.rx_buffer = &.{};
         return self.rx_buffer;
+    }
+
+    pub fn writePacket(self: *TunDevice, packet: []const u8) void {
+        self.tx_buffer = packet;
     }
 };
 
