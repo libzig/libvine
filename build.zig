@@ -48,6 +48,19 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(lib);
 
+    const vine_cli = b.addExecutable(.{
+        .name = "vine",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("bin/vine.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    b.installArtifact(vine_cli);
+
+    const vine_step = b.step("vine", "Build the vine binary");
+    vine_step.dependOn(&vine_cli.step);
+
     const lib_unit_tests = b.addTest(.{
         .root_module = libvine_module,
     });
@@ -106,5 +119,17 @@ pub fn build(b: *std.Build) void {
     relay_fallback_ping.root_module.addImport("libvine", libvine_export);
     b.installArtifact(relay_fallback_ping);
     examples_step.dependOn(&relay_fallback_ping.step);
+
+    const multi_node_relay_demo = b.addExecutable(.{
+        .name = "multi_node_relay_demo",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/multi_node_relay_demo.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    multi_node_relay_demo.root_module.addImport("libvine", libvine_export);
+    b.installArtifact(multi_node_relay_demo);
+    examples_step.dependOn(&multi_node_relay_demo.step);
 
 }
