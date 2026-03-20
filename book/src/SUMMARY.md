@@ -4,6 +4,7 @@
 - [CLI](./cli.md)
 - [Identity](./identity.md)
 - [Configuration](./configuration.md)
+- [Daemon](./daemon.md)
 - [Operations](./operations.md)
 - [Architecture](./architecture.md)
 - [MVP](./mvp.md)
