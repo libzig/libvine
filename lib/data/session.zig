@@ -11,6 +11,13 @@ pub const EncodedFrame = struct {
     payload: []u8,
 };
 
+pub const ReceivedFrame = union(types.PacketKind) {
+    control: protocol.Message,
+    data: []const u8,
+    keepalive: []const u8,
+    diagnostic: []const u8,
+};
+
 pub const Session = struct {
     session_id: types.SessionId,
     control_mode: frame.CarriageMode = .reliable_control_stream,
@@ -44,6 +51,16 @@ pub const Session = struct {
                 .payload_len = @intCast(payload.len),
             },
             .payload = payload,
+        };
+    }
+
+    pub fn receive(self: Session, header: frame.Header, payload: []const u8) VineError!ReceivedFrame {
+        _ = self;
+        return switch (header.kind) {
+            .control => .{ .control = try control_codec.decode(payload) },
+            .data => .{ .data = try packet_codec.decode(payload) },
+            .keepalive => .{ .keepalive = payload },
+            .diagnostic => .{ .diagnostic = payload },
         };
     }
 };
