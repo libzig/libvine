@@ -58,6 +58,19 @@ pub const SessionManager = struct {
         return self.sessions.preferredForPeer(peer_id);
     }
 
+    pub fn promoteHandle(
+        self: *SessionManager,
+        peer: ManagedPeer,
+        handle: integration.libmesh_adapter.SessionHandle,
+    ) bool {
+        if (!allowPlan(peer, handle.plan)) return false;
+        return self.sessions.promote(.{
+            .peer_id = handle.peer_id,
+            .session_id = handle.session_id,
+            .preference = preferenceForPlan(handle.plan),
+        });
+    }
+
     pub fn trackHandle(
         self: *SessionManager,
         peer: ManagedPeer,
@@ -359,4 +372,35 @@ test "session manager prefers direct then signaling then relay at runtime" {
     }));
 
     try @import("std").testing.expectEqual(@as(u64, 12), manager.preferredSessionForPeer(peer.peer_id).?.session_id.value);
+}
+
+test "session manager promotes sessions when better paths appear" {
+    const peer = ManagedPeer{
+        .peer_id = core.types.PeerId.init(.{0x80} ** core.types.peer_id_len),
+        .relay_capable = true,
+    };
+    var sessions = [_]core.session_table.ActiveSession{
+        .{
+            .peer_id = peer.peer_id,
+            .session_id = .{ .value = 20 },
+            .preference = .relay,
+        },
+        .{
+            .peer_id = peer.peer_id,
+            .session_id = .{ .value = 21 },
+            .preference = .direct_after_signaling,
+        },
+    };
+    var manager = SessionManager.init(&.{peer}, &sessions);
+
+    try @import("std").testing.expect(manager.promoteHandle(peer, .{
+        .peer_id = peer.peer_id,
+        .session_id = .{ .value = 22 },
+        .plan = .{ .direct = .{
+            .peer_id = peer.peer_id,
+            .node_id = @import("libmesh").Foundation.NodeId.fromPublicKey([_]u8{0x80} ** 32),
+        } },
+    }));
+    try @import("std").testing.expectEqual(@as(u64, 22), manager.preferredSessionForPeer(peer.peer_id).?.session_id.value);
+    try @import("std").testing.expectEqual(@as(u64, 20), manager.sessions.fallbackToRelay(peer.peer_id).?.session_id.value);
 }
