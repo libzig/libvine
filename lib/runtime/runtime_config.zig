@@ -11,12 +11,14 @@ pub const RuntimeConfig = struct {
     admission_policy: core.policy.AdmissionPolicy,
     startup_bootstrap_peers: []const api.config.BootstrapPeer,
     relay_peers: []const core.types.PeerId,
+    enrolled_peers: []const @import("enrollment.zig").EnrollmentState.EnrolledPeer,
 
     pub fn deinit(self: *RuntimeConfig, allocator: std.mem.Allocator) void {
         allocator.free(self.node_config.allowlist);
         for (self.node_config.bootstrap_peers) |peer| allocator.free(peer.address);
         allocator.free(self.node_config.bootstrap_peers);
         allocator.free(self.relay_peers);
+        allocator.free(self.enrolled_peers);
         self.* = undefined;
     }
 };
@@ -41,6 +43,8 @@ pub fn load(allocator: std.mem.Allocator, config_path: []const u8) !RuntimeConfi
     errdefer allocator.free(bootstrap_peers);
     const relay_peers = try loadRelayPeers(allocator, parsed.allowed_peers);
     errdefer allocator.free(relay_peers);
+    const enrolled_peers = try loadEnrolledPeers(allocator, parsed.allowed_peers);
+    errdefer allocator.free(enrolled_peers);
 
     return .{
         .node_config = .{
@@ -71,6 +75,7 @@ pub fn load(allocator: std.mem.Allocator, config_path: []const u8) !RuntimeConfi
         },
         .startup_bootstrap_peers = bootstrap_peers,
         .relay_peers = relay_peers,
+        .enrolled_peers = enrolled_peers,
     };
 }
 
@@ -134,6 +139,18 @@ fn loadRelayPeers(allocator: std.mem.Allocator, allowed_peers: []const file_conf
     return peers;
 }
 
+fn loadEnrolledPeers(allocator: std.mem.Allocator, allowed_peers: []const file_config.FileConfig.AllowedPeer) ![]@import("enrollment.zig").EnrollmentState.EnrolledPeer {
+    const peers = try allocator.alloc(@import("enrollment.zig").EnrollmentState.EnrolledPeer, allowed_peers.len);
+    for (allowed_peers, 0..) |peer, i| {
+        peers[i] = .{
+            .peer_id = try parsePeerId(peer.peer_id),
+            .prefix = try core.types.VinePrefix.parse(peer.prefix),
+            .relay_capable = peer.relay_capable,
+        };
+    }
+    return peers;
+}
+
 fn parsePeerId(text: []const u8) !core.types.PeerId {
     if (text.len != core.types.peer_id_len * 2) return error.InvalidConfig;
 
@@ -166,6 +183,7 @@ test "runtime config module captures a node config translation target" {
         },
         .startup_bootstrap_peers = &.{},
         .relay_peers = &.{},
+        .enrolled_peers = &.{},
     };
 
     try std.testing.expectEqualStrings("devnet", cfg.node_config.network_id.encode());
@@ -231,6 +249,8 @@ test "runtime config loads node config from persisted config and identity files"
     try std.testing.expect(loaded.admission_policy.allows(stored.bound.peer_id));
     try std.testing.expectEqual(@as(usize, 1), loaded.relay_peers.len);
     try std.testing.expect(loaded.relay_peers[0].eql(stored.bound.peer_id));
+    try std.testing.expectEqual(@as(usize, 1), loaded.enrolled_peers.len);
+    try std.testing.expect(loaded.enrolled_peers[0].prefix.contains(core.types.VineAddress.init(.{ 10, 42, 1, 7 })));
 }
 
 test "runtime config translates multiple configured peers into startup state" {
@@ -296,6 +316,8 @@ test "runtime config translates multiple configured peers into startup state" {
     try std.testing.expectEqual(@as(usize, 2), loaded.node_config.allowlist.len);
     try std.testing.expectEqual(@as(usize, 1), loaded.relay_peers.len);
     try std.testing.expect(loaded.relay_peers[0].eql(peer_b));
+    try std.testing.expectEqual(@as(usize, 2), loaded.enrolled_peers.len);
+    try std.testing.expect(loaded.enrolled_peers[1].relay_capable);
     try std.testing.expect(!loaded.node_config.policy.allow_relay);
 }
 
