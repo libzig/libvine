@@ -1,5 +1,7 @@
 const std = @import("std");
 const version = "0.0.1";
+pub const default_config_dir = "/etc/libvine";
+pub const default_config_path = "/etc/libvine/vine.toml";
 
 const Command = enum {
     identity,
@@ -87,5 +89,8 @@ fn printHelp() !void {
         \\    status
         \\    diagnostics
         \\
-    , .{});
+        \\DEFAULT CONFIG:
+        \\    {s}
+        \\
+    , .{default_config_path});
 }
