@@ -163,6 +163,14 @@ pub fn readPidFile(allocator: std.mem.Allocator, pidfile_path: []const u8) !std.
     return std.fmt.parseInt(std.process.Child.Id, std.mem.trim(u8, data, " \t\r\n"), 10);
 }
 
+pub fn requestShutdown(pid: std.process.Child.Id) !void {
+    try std.posix.kill(pid, std.posix.SIG.TERM);
+}
+
+pub fn shutdownSignal() u8 {
+    return std.posix.SIG.TERM;
+}
+
 fn parsePhase(value: []const u8) ?DaemonPhase {
     inline for (std.meta.tags(DaemonPhase)) |phase| {
         if (std.mem.eql(u8, value, @tagName(phase))) return phase;
@@ -279,4 +287,8 @@ test "daemon runtime writes reads and removes pidfiles" {
 
     try runtime.removePidFile();
     try std.testing.expectError(error.FileNotFound, std.fs.openFileAbsolute(pidfile_path, .{}));
+}
+
+test "daemon runtime uses sigterm for clean shutdown requests" {
+    try std.testing.expectEqual(std.posix.SIG.TERM, shutdownSignal());
 }

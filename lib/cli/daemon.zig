@@ -55,6 +55,10 @@ fn handleStop(args: []const []const u8, paths: DaemonCommandPaths) !void {
         std.debug.print("daemon stopped\n", .{});
         return;
     };
+    daemon_runtime.requestShutdown(pid) catch |err| switch (err) {
+        error.ProcessNotFound => {},
+        else => return err,
+    };
 
     var runtime = daemon_runtime.init(paths);
     runtime.pid = pid;
@@ -182,7 +186,7 @@ test "daemon stop removes an existing pidfile" {
         .state_path = "/run/libvine/state.json",
         .log_path = "/var/log/libvine/vine.log",
     });
-    runtime.pid = 77;
+    runtime.pid = std.math.maxInt(std.process.Child.Id);
     try runtime.writePidFile(std.testing.allocator);
 
     try handleStop(&.{}, .{
