@@ -95,4 +95,16 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(two_peer_ping);
     examples_step.dependOn(&two_peer_ping.step);
 
+    const relay_fallback_ping = b.addExecutable(.{
+        .name = "relay_fallback_ping",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/relay_fallback_ping.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    relay_fallback_ping.root_module.addImport("libvine", libvine_export);
+    b.installArtifact(relay_fallback_ping);
+    examples_step.dependOn(&relay_fallback_ping.step);
+
 }
