@@ -154,12 +154,17 @@ pub const Node = struct {
     }
 
     pub fn withdrawRemoteMembership(self: *Node, peer_id: core.types.PeerId) bool {
-        for (self.remote_memberships) |*membership| {
-            if (membership.peer_id.eql(peer_id)) {
-                membership.expires_at_ms = 0;
-                self.emit(.{ .topology_change = peer_id });
-                return self.route_table.withdraw(membership.prefix);
-            }
+        const local_membership = self.local_membership orelse return false;
+        const state = enrollment.EnrollmentState{
+            .local_membership = local_membership,
+            .admission_policy = .{ .allowed_peers = self.config.allowlist },
+            .enrolled_peers = &.{},
+        };
+        for (self.remote_memberships) |membership| {
+            if (!membership.peer_id.eql(peer_id)) continue;
+            if (!state.withdrawRemoteMembership(self.remote_memberships, peer_id)) return false;
+            self.emit(.{ .topology_change = peer_id });
+            return self.route_table.withdraw(membership.prefix);
         }
         return false;
     }

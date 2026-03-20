@@ -47,6 +47,17 @@ pub const EnrollmentState = struct {
         }
         return false;
     }
+
+    pub fn withdrawRemoteMembership(self: EnrollmentState, memberships: []core.membership.PeerMembership, peer_id: core.types.PeerId) bool {
+        _ = self;
+        for (memberships) |*membership| {
+            if (membership.peer_id.eql(peer_id)) {
+                membership.expires_at_ms = 0;
+                return true;
+            }
+        }
+        return false;
+    }
 };
 
 test "enrollment state captures local membership and admission policy" {
@@ -172,4 +183,31 @@ test "enrollment state refreshes remote memberships from control plane updates" 
         .announced_at_ms = 3,
     }));
     try std.testing.expect(memberships[1].peer_id.eql(peer_b));
+}
+
+test "enrollment state withdraws remote membership cleanly" {
+    const peer = core.types.PeerId.init(.{0x66} ** core.types.peer_id_len);
+    var memberships = [_]core.membership.PeerMembership{
+        .{
+            .peer_id = peer,
+            .prefix = try core.types.VinePrefix.parse("10.42.6.0/24"),
+            .epoch = core.types.MembershipEpoch.init(1),
+            .announced_at_ms = 1,
+            .expires_at_ms = 999,
+        },
+    };
+    const state = EnrollmentState{
+        .local_membership = .{
+            .network_id = try core.types.NetworkId.init("devnet"),
+            .peer_id = peer,
+            .prefix = try core.types.VinePrefix.parse("10.42.0.0/24"),
+            .epoch = core.types.MembershipEpoch.init(1),
+            .attached_at_ms = 0,
+        },
+        .admission_policy = .{ .allowed_peers = &.{peer} },
+        .enrolled_peers = &.{},
+    };
+
+    try std.testing.expect(state.withdrawRemoteMembership(&memberships, peer));
+    try std.testing.expectEqual(@as(?i64, 0), memberships[0].expires_at_ms);
 }
