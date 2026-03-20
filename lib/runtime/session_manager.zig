@@ -35,12 +35,7 @@ pub const SessionManager = struct {
         var connected: usize = 0;
         for (self.configured_peers) |peer| {
             const handle = self.mesh.openSession(peer.peer_id) orelse continue;
-            if (!allowPlan(peer, handle.plan)) continue;
-            if (self.putSession(.{
-                .peer_id = handle.peer_id,
-                .session_id = handle.session_id,
-                .preference = preferenceForPlan(handle.plan),
-            })) {
+            if (self.trackHandle(peer, handle)) {
                 connected += 1;
             }
         }
@@ -57,6 +52,23 @@ pub const SessionManager = struct {
 
     pub fn relaySessionCount(self: SessionManager) usize {
         return countByPreference(self, .relay);
+    }
+
+    pub fn preferredSessionForPeer(self: SessionManager, peer_id: core.types.PeerId) ?core.session_table.ActiveSession {
+        return self.sessions.preferredForPeer(peer_id);
+    }
+
+    pub fn trackHandle(
+        self: *SessionManager,
+        peer: ManagedPeer,
+        handle: integration.libmesh_adapter.SessionHandle,
+    ) bool {
+        if (!allowPlan(peer, handle.plan)) return false;
+        return self.putSession(.{
+            .peer_id = handle.peer_id,
+            .session_id = handle.session_id,
+            .preference = preferenceForPlan(handle.plan),
+        });
     }
 
     fn putSession(self: *SessionManager, session: core.session_table.ActiveSession) bool {
@@ -307,4 +319,44 @@ test "session manager only accepts relay plans for relay-capable peers" {
         mesh,
     );
     try @import("std").testing.expectEqual(@as(usize, 1), allowed.connectConfiguredPeers());
+}
+
+test "session manager prefers direct then signaling then relay at runtime" {
+    const peer = ManagedPeer{
+        .peer_id = core.types.PeerId.init(.{0x79} ** core.types.peer_id_len),
+        .relay_capable = true,
+    };
+    var sessions = [_]core.session_table.ActiveSession{
+        .{ .peer_id = core.types.PeerId.init(.{0} ** core.types.peer_id_len), .session_id = .{ .value = 0 }, .preference = .relay },
+        .{ .peer_id = core.types.PeerId.init(.{0} ** core.types.peer_id_len), .session_id = .{ .value = 0 }, .preference = .relay },
+        .{ .peer_id = core.types.PeerId.init(.{0} ** core.types.peer_id_len), .session_id = .{ .value = 0 }, .preference = .relay },
+    };
+    var manager = SessionManager.init(&.{peer}, &sessions);
+
+    try @import("std").testing.expect(manager.trackHandle(peer, .{
+        .peer_id = peer.peer_id,
+        .session_id = .{ .value = 10 },
+        .plan = .{ .relay = .{
+            .peer_id = peer.peer_id,
+            .node_id = @import("libmesh").Foundation.NodeId.fromPublicKey([_]u8{0x79} ** 32),
+        } },
+    }));
+    try @import("std").testing.expect(manager.trackHandle(peer, .{
+        .peer_id = peer.peer_id,
+        .session_id = .{ .value = 11 },
+        .plan = .{ .signaling_then_direct = .{
+            .peer_id = peer.peer_id,
+            .node_id = @import("libmesh").Foundation.NodeId.fromPublicKey([_]u8{0x7A} ** 32),
+        } },
+    }));
+    try @import("std").testing.expect(manager.trackHandle(peer, .{
+        .peer_id = peer.peer_id,
+        .session_id = .{ .value = 12 },
+        .plan = .{ .direct = .{
+            .peer_id = peer.peer_id,
+            .node_id = @import("libmesh").Foundation.NodeId.fromPublicKey([_]u8{0x7B} ** 32),
+        } },
+    }));
+
+    try @import("std").testing.expectEqual(@as(u64, 12), manager.preferredSessionForPeer(peer.peer_id).?.session_id.value);
 }
