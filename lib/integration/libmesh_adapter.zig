@@ -7,7 +7,20 @@ pub const CandidatePeer = struct {
 };
 
 pub const LibmeshAdapter = struct {
+    candidates: []const CandidatePeer = &.{},
+
     pub fn init() LibmeshAdapter {
         return .{};
+    }
+
+    pub fn withCandidates(candidates: []const CandidatePeer) LibmeshAdapter {
+        return .{ .candidates = candidates };
+    }
+
+    pub fn resolvePeerByIdentity(self: LibmeshAdapter, peer_id: types.PeerId) ?CandidatePeer {
+        for (self.candidates) |candidate| {
+            if (candidate.peer_id.eql(peer_id)) return candidate;
+        }
+        return null;
     }
 };
