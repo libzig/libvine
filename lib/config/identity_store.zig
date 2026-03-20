@@ -85,6 +85,18 @@ pub fn generateAndWrite(path: []const u8) !StoredIdentity {
     return stored;
 }
 
+pub fn readFile(allocator: std.mem.Allocator, path: []const u8) !StoredIdentity {
+    const file = if (std.fs.path.isAbsolute(path))
+        try std.fs.openFileAbsolute(path, .{})
+    else
+        try std.fs.cwd().openFile(path, .{});
+    defer file.close();
+
+    const data = try file.readToEndAlloc(allocator, 4096);
+    defer allocator.free(data);
+    return decode(data);
+}
+
 fn parseHex32(text: []const u8) ![32]u8 {
     if (text.len != 64) return error.InvalidIdentityFile;
 
