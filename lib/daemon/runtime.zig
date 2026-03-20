@@ -73,6 +73,23 @@ pub const Runtime = struct {
         defer allocator.free(body);
         try file.writeAll(body);
     }
+
+    pub fn writePidFile(self: *const Runtime, allocator: std.mem.Allocator) !void {
+        try ensureParentDir(self.paths.pidfile_path);
+        const file = try std.fs.createFileAbsolute(self.paths.pidfile_path, .{ .truncate = true, .mode = 0o600 });
+        defer file.close();
+
+        const body = try std.fmt.allocPrint(allocator, "{d}\n", .{self.pid orelse 0});
+        defer allocator.free(body);
+        try file.writeAll(body);
+    }
+
+    pub fn removePidFile(self: *const Runtime) !void {
+        std.fs.deleteFileAbsolute(self.paths.pidfile_path) catch |err| switch (err) {
+            error.FileNotFound => {},
+            else => return err,
+        };
+    }
 };
 
 pub const Snapshot = struct {
@@ -134,6 +151,16 @@ pub fn readStateFile(allocator: std.mem.Allocator, state_path: []const u8) !Snap
 pub fn deinitSnapshot(allocator: std.mem.Allocator, snapshot: *Snapshot) void {
     if (snapshot.config_path) |path| allocator.free(path);
     snapshot.* = undefined;
+}
+
+pub fn readPidFile(allocator: std.mem.Allocator, pidfile_path: []const u8) !std.process.Child.Id {
+    const file = try std.fs.openFileAbsolute(pidfile_path, .{});
+    defer file.close();
+
+    const data = try file.readToEndAlloc(allocator, 64);
+    defer allocator.free(data);
+
+    return std.fmt.parseInt(std.process.Child.Id, std.mem.trim(u8, data, " \t\r\n"), 10);
 }
 
 fn parsePhase(value: []const u8) ?DaemonPhase {
@@ -228,4 +255,28 @@ test "daemon runtime writes and reads state snapshots" {
     try std.testing.expectEqual(DaemonPhase.running, snapshot.phase);
     try std.testing.expectEqual(@as(?std.process.Child.Id, 4242), snapshot.pid);
     try std.testing.expectEqualStrings("/etc/libvine/vine.toml", snapshot.config_path.?);
+}
+
+test "daemon runtime writes reads and removes pidfiles" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const tmp_path = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(tmp_path);
+    const pidfile_path = try std.fmt.allocPrint(std.testing.allocator, "{s}/run/vine.pid", .{tmp_path});
+    defer std.testing.allocator.free(pidfile_path);
+
+    var runtime = init(.{
+        .pidfile_path = pidfile_path,
+        .state_path = "/run/libvine/state.json",
+        .log_path = "/var/log/libvine/vine.log",
+    });
+    runtime.pid = 31337;
+    try runtime.writePidFile(std.testing.allocator);
+
+    const pid = try readPidFile(std.testing.allocator, pidfile_path);
+    try std.testing.expectEqual(@as(std.process.Child.Id, 31337), pid);
+
+    try runtime.removePidFile();
+    try std.testing.expectError(error.FileNotFound, std.fs.openFileAbsolute(pidfile_path, .{}));
 }

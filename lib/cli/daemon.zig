@@ -40,21 +40,27 @@ fn handleStart(args: []const []const u8, default_config_path: []const u8, paths:
 
     var runtime = daemon_runtime.init(paths);
     const pid = try runtime.startBackground(allocator, exe_path, config_path);
+    try runtime.writePidFile(allocator);
     std.debug.print("daemon started\npid={d}\n", .{pid});
 }
 
 fn handleStop(args: []const []const u8, paths: DaemonCommandPaths) !void {
-    _ = paths;
     if (args.len != 0) return error.InvalidArguments;
 
-    var runtime = daemon_runtime.init(.{
-        .pidfile_path = "",
-        .state_path = "",
-        .log_path = "",
-    });
-    runtime.runForeground("");
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const pid = daemon_runtime.readPidFile(allocator, paths.pidfile_path) catch {
+        std.debug.print("daemon stopped\n", .{});
+        return;
+    };
+
+    var runtime = daemon_runtime.init(paths);
+    runtime.pid = pid;
     runtime.stop();
-    std.debug.print("daemon stopped\n", .{});
+    try runtime.removePidFile();
+    std.debug.print("daemon stopped\npid={d}\n", .{pid});
 }
 
 fn handleStatus(args: []const []const u8, paths: DaemonCommandPaths) !void {
@@ -70,7 +76,8 @@ fn handleStatus(args: []const []const u8, paths: DaemonCommandPaths) !void {
     };
     defer daemon_runtime.deinitSnapshot(allocator, &snapshot);
 
-    std.debug.print("daemon status\nphase={s}\n", .{@tagName(snapshot.phase)});
+    const pid = daemon_runtime.readPidFile(allocator, paths.pidfile_path) catch snapshot.pid orelse 0;
+    std.debug.print("daemon status\nphase={s}\npid={d}\n", .{ @tagName(snapshot.phase), pid });
 }
 
 fn parseSubcommand(arg: []const u8) ?Subcommand {
@@ -159,4 +166,30 @@ test "daemon status reads persisted runtime state" {
     defer daemon_runtime.deinitSnapshot(std.testing.allocator, &snapshot);
 
     try std.testing.expectEqual(daemon_runtime.DaemonPhase.running, snapshot.phase);
+}
+
+test "daemon stop removes an existing pidfile" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const dir_path = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(dir_path);
+    const pidfile_path = try std.fmt.allocPrint(std.testing.allocator, "{s}/vine.pid", .{dir_path});
+    defer std.testing.allocator.free(pidfile_path);
+
+    var runtime = daemon_runtime.init(.{
+        .pidfile_path = pidfile_path,
+        .state_path = "/run/libvine/state.json",
+        .log_path = "/var/log/libvine/vine.log",
+    });
+    runtime.pid = 77;
+    try runtime.writePidFile(std.testing.allocator);
+
+    try handleStop(&.{}, .{
+        .pidfile_path = pidfile_path,
+        .state_path = "/run/libvine/state.json",
+        .log_path = "/var/log/libvine/vine.log",
+    });
+
+    try std.testing.expectError(error.FileNotFound, std.fs.openFileAbsolute(pidfile_path, .{}));
 }
