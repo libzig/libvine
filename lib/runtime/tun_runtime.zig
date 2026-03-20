@@ -4,10 +4,17 @@ const linux = @import("../linux/linux.zig");
 const enrollment = @import("enrollment.zig");
 
 pub const TunRuntime = struct {
+    pub const DropReason = enum {
+        unknown_route,
+        no_session,
+        unauthorized_peer,
+    };
+
     node: *api.node.Node,
     installed_routes: []linux.routes.InstalledRoute,
     last_sent_packet: []const u8 = &.{},
     last_session: ?core.session_table.ActiveSession = null,
+    last_drop: ?DropReason = null,
 
     pub fn init(node: *api.node.Node, installed_routes: []linux.routes.InstalledRoute) TunRuntime {
         return .{
@@ -59,11 +66,24 @@ pub const TunRuntime = struct {
         const session = self.node.session_table.bySessionId(session_id) orelse return null;
         self.last_sent_packet = packet;
         self.last_session = session;
+        self.last_drop = null;
         return session;
     }
 
     pub fn receivePacketFromSession(self: *TunRuntime, peer_id: core.types.PeerId, packet: []const u8) bool {
         return self.node.receivePacket(peer_id, packet);
+    }
+
+    pub fn dispatchPacket(self: *TunRuntime, packet: []const u8) ?core.session_table.ActiveSession {
+        if (self.routePacket(packet) == null) {
+            self.last_drop = .unknown_route;
+            return null;
+        }
+        const session = self.sendPacketOverPreferredSession(packet) orelse {
+            self.last_drop = .no_session;
+            return null;
+        };
+        return session;
     }
 };
 
@@ -307,4 +327,38 @@ test "tun runtime receives packets from sessions and injects them into tun" {
 
     try std.testing.expect(runtime.receivePacketFromSession(peer, &packet));
     try std.testing.expectEqualSlices(u8, &packet, runtime.node.tun.tx_buffer);
+}
+
+test "tun runtime drops packets for unknown routes" {
+    const std = @import("std");
+
+    var routes = [_]core.route_table.RouteEntry{};
+    var sessions = [_]core.session_table.ActiveSession{};
+    var memberships = [_]core.membership.PeerMembership{};
+    var installed = [_]linux.routes.InstalledRoute{};
+
+    var node = try api.node.Node.init(.{
+        .network_id = try core.types.NetworkId.init("home-net"),
+        .tun = .{
+            .ifname = [_]u8{ 'v', 'i', 'n', 'e', '6', 0 } ++ ([_]u8{0} ** 10),
+            .local_address = try core.types.VineAddress.parse("10.42.0.1"),
+            .prefix_len = 24,
+            .mtu = 1400,
+        },
+    }, .{
+        .routes = &routes,
+        .sessions = &sessions,
+        .memberships = &memberships,
+    });
+    var runtime = TunRuntime.init(&node, &installed);
+    const packet = [_]u8{
+        0x45, 0x00, 0x00, 0x14,
+        0x00, 0x00, 0x00, 0x00,
+        0x40, 0x00, 0x00, 0x00,
+        10, 42, 0, 1,
+        10, 99, 0, 7,
+    } ++ ([_]u8{0} ** 4);
+
+    try std.testing.expect(runtime.dispatchPacket(&packet) == null);
+    try std.testing.expectEqual(TunRuntime.DropReason.unknown_route, runtime.last_drop.?);
 }
