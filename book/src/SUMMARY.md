@@ -16,6 +16,7 @@
 - [Enrollment Across Machines](./enrollment-across-machines.md)
 - [TUN Permissions](./tun-permissions.md)
 - [LAN Deployment](./lan-deployment.md)
+- [Internet Deployment](./internet-deployment.md)
 - [Operations](./operations.md)
 - [Architecture](./architecture.md)
 - [MVP](./mvp.md)
