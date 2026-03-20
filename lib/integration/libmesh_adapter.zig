@@ -10,6 +10,28 @@ pub const ReachabilityPlan = union(enum) {
     direct: CandidatePeer,
     signaling_then_direct: CandidatePeer,
     relay: CandidatePeer,
+
+    pub const Mode = enum {
+        direct,
+        signaling_then_direct,
+        relay,
+    };
+
+    pub fn mode(self: ReachabilityPlan) Mode {
+        return switch (self) {
+            .direct => .direct,
+            .signaling_then_direct => .signaling_then_direct,
+            .relay => .relay,
+        };
+    }
+
+    pub fn peer(self: ReachabilityPlan) CandidatePeer {
+        return switch (self) {
+            .direct => |value| value,
+            .signaling_then_direct => |value| value,
+            .relay => |value| value,
+        };
+    }
 };
 
 pub const SessionHandle = struct {
@@ -49,11 +71,7 @@ pub const LibmeshAdapter = struct {
 
     pub fn resolveReachability(self: LibmeshAdapter, peer_id: types.PeerId) ?ReachabilityPlan {
         for (self.plans) |plan| {
-            const candidate = switch (plan) {
-                .direct => |value| value,
-                .signaling_then_direct => |value| value,
-                .relay => |value| value,
-            };
+            const candidate = plan.peer();
             if (candidate.peer_id.eql(peer_id)) return plan;
         }
         return null;
