@@ -1,4 +1,5 @@
 const api = @import("../api/api.zig");
+const core = @import("../core/core.zig");
 const linux = @import("../linux/linux.zig");
 const enrollment = @import("enrollment.zig");
 
@@ -36,11 +37,24 @@ pub const TunRuntime = struct {
         }
         return installed_count;
     }
+
+    pub fn readPacketFromTun(self: *TunRuntime) ?[]const u8 {
+        return self.node.tun.readPacket();
+    }
+
+    pub fn routePacket(self: *TunRuntime, packet: []const u8) ?core.route_table.RouteEntry {
+        const forwarder = core.forwarder.Forwarder{
+            .routes = &self.node.route_table,
+            .sessions = &self.node.session_table,
+            .tun = &self.node.tun,
+            .local_peer_id = self.node.local_peer_id,
+        };
+        return forwarder.lookupDestination(packet);
+    }
 };
 
 test "tun runtime captures node and route installation storage" {
     const std = @import("std");
-    const core = @import("../core/core.zig");
 
     var routes = [_]core.route_table.RouteEntry{};
     var sessions = [_]core.session_table.ActiveSession{};
@@ -70,7 +84,6 @@ test "tun runtime captures node and route installation storage" {
 
 test "tun runtime opens and configures tun from node config" {
     const std = @import("std");
-    const core = @import("../core/core.zig");
 
     var routes = [_]core.route_table.RouteEntry{};
     var sessions = [_]core.session_table.ActiveSession{};
@@ -102,7 +115,6 @@ test "tun runtime opens and configures tun from node config" {
 
 test "tun runtime installs local routes for configured remote prefixes" {
     const std = @import("std");
-    const core = @import("../core/core.zig");
 
     var routes = [_]core.route_table.RouteEntry{
         undefined,
@@ -147,4 +159,47 @@ test "tun runtime installs local routes for configured remote prefixes" {
     try std.testing.expect(runtime.installed_routes[1].active);
     try std.testing.expect(runtime.node.route_table.entries[0].prefix.contains(try core.types.VineAddress.parse("10.42.1.7")));
     try std.testing.expect(runtime.node.route_table.entries[1].peer_id.eql(peers[1].peer_id));
+}
+
+test "tun runtime reads packets from tun and routes by overlay destination" {
+    const std = @import("std");
+
+    var routes = [_]core.route_table.RouteEntry{
+        .{
+            .prefix = try core.types.VinePrefix.parse("10.42.9.0/24"),
+            .peer_id = core.types.PeerId.init(.{0x33} ** core.types.peer_id_len),
+            .session_id = null,
+            .epoch = .{ .value = 1 },
+            .preference = .relay,
+        },
+    };
+    var sessions = [_]core.session_table.ActiveSession{};
+    var memberships = [_]core.membership.PeerMembership{};
+    var installed = [_]linux.routes.InstalledRoute{};
+
+    var node = try api.node.Node.init(.{
+        .network_id = try core.types.NetworkId.init("home-net"),
+        .tun = .{
+            .ifname = [_]u8{ 'v', 'i', 'n', 'e', '3', 0 } ++ ([_]u8{0} ** 10),
+            .local_address = try core.types.VineAddress.parse("10.42.0.1"),
+            .prefix_len = 24,
+            .mtu = 1400,
+        },
+    }, .{
+        .routes = &routes,
+        .sessions = &sessions,
+        .memberships = &memberships,
+    });
+    var runtime = TunRuntime.init(&node, &installed);
+    const packet = [_]u8{
+        0x45, 0x00, 0x00, 0x14,
+        0x00, 0x00, 0x00, 0x00,
+        0x40, 0x00, 0x00, 0x00,
+        10, 42, 0, 1,
+        10, 42, 9, 7,
+    } ++ ([_]u8{0} ** 4);
+    runtime.node.tun.loadReadBuffer(&packet);
+
+    try std.testing.expectEqualSlices(u8, &packet, runtime.readPacketFromTun().?);
+    try std.testing.expect(runtime.routePacket(&packet).?.peer_id.eql(core.types.PeerId.init(.{0x33} ** core.types.peer_id_len)));
 }
