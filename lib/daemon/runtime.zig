@@ -40,6 +40,11 @@ pub const Runtime = struct {
         self.phase = .running;
         return child.id;
     }
+
+    pub fn stop(self: *Runtime) void {
+        self.phase = .stopping;
+        self.phase = .stopped;
+    }
 };
 
 pub fn init(paths: RuntimePaths) Runtime {
@@ -89,4 +94,17 @@ test "daemon runtime builds background argv from current executable and config" 
     try std.testing.expectEqualStrings("daemon", argv[1]);
     try std.testing.expectEqualStrings("run", argv[2]);
     try std.testing.expectEqualStrings("/etc/libvine/vine.toml", argv[4]);
+}
+
+test "daemon runtime stops from running state" {
+    var runtime = init(.{
+        .pidfile_path = "/run/libvine/vine.pid",
+        .state_path = "/run/libvine/state.json",
+        .log_path = "/var/log/libvine/vine.log",
+    });
+
+    runtime.runForeground("/etc/libvine/vine.toml");
+    runtime.stop();
+
+    try std.testing.expectEqual(DaemonPhase.stopped, runtime.phase);
 }
