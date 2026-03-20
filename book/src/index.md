@@ -23,7 +23,3 @@ For the MVP, `libvine` is intentionally narrow:
 ## MVP Direction
 
 The first milestone is a coherent library skeleton with stable public boundaries, tests that compile, and enough documentation for downstream consumers to follow the intended architecture before deeper control-plane and data-plane work lands.
-
-## Documentation
-
-The project documentation now lives in the mdBook under [`book/`](./book/). The entry point is [`book/src/SUMMARY.md`](./book/src/SUMMARY.md).
