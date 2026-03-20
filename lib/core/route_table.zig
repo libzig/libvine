@@ -13,6 +13,8 @@ pub const RouteEntry = struct {
     session_id: ?types.SessionId = null,
     epoch: types.MembershipEpoch,
     preference: Preference = .relay,
+    generation: u64 = 0,
+    tombstone: bool = false,
 };
 
 pub const RouteTable = struct {
@@ -27,6 +29,9 @@ pub const RouteTable = struct {
             if (existing.prefix.network.eql(entry.prefix.network) and
                 existing.prefix.prefix_len == entry.prefix.prefix_len)
             {
+                if (entry.epoch.value < existing.epoch.value or entry.generation < existing.generation) {
+                    return VineError.RouteConflict;
+                }
                 existing.* = entry;
                 return;
             }
@@ -50,6 +55,7 @@ pub const RouteTable = struct {
         for (self.entries, 0..) |*entry, idx| {
             if (entry.prefix.network.eql(prefix.network) and entry.prefix.prefix_len == prefix.prefix_len) {
                 self.entries[idx].session_id = null;
+                self.entries[idx].tombstone = true;
                 return true;
             }
         }
