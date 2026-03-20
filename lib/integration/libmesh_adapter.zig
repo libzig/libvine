@@ -12,6 +12,12 @@ pub const ReachabilityPlan = union(enum) {
     relay: CandidatePeer,
 };
 
+pub const SessionHandle = struct {
+    peer_id: types.PeerId,
+    session_id: types.SessionId,
+    plan: ReachabilityPlan,
+};
+
 pub const LibmeshAdapter = struct {
     candidates: []const CandidatePeer = &.{},
     plans: []const ReachabilityPlan = &.{},
@@ -51,5 +57,18 @@ pub const LibmeshAdapter = struct {
             if (candidate.peer_id.eql(peer_id)) return plan;
         }
         return null;
+    }
+
+    pub fn connectPeer(self: LibmeshAdapter, peer_id: types.PeerId) ?SessionHandle {
+        const plan = self.resolveReachability(peer_id) orelse return null;
+        return .{
+            .peer_id = peer_id,
+            .session_id = .{ .value = 1 },
+            .plan = plan,
+        };
+    }
+
+    pub fn openSession(self: LibmeshAdapter, peer_id: types.PeerId) ?SessionHandle {
+        return self.connectPeer(peer_id);
     }
 };
