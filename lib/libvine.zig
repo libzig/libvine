@@ -3,6 +3,7 @@ const std = @import("std");
 pub const api = @import("api/api.zig");
 pub const cli = @import("cli/cli.zig");
 pub const common = @import("common/common.zig");
+pub const config = @import("config/config.zig");
 pub const control = @import("control/control.zig");
 pub const core = @import("core/core.zig");
 pub const data = @import("data/data.zig");
@@ -18,6 +19,7 @@ test {
     _ = api;
     _ = cli;
     _ = common;
+    _ = config;
     _ = control;
     _ = core;
     _ = data;
