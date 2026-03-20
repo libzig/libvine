@@ -10,11 +10,13 @@ pub const RuntimeConfig = struct {
     local_membership: core.membership.LocalMembership,
     admission_policy: core.policy.AdmissionPolicy,
     startup_bootstrap_peers: []const api.config.BootstrapPeer,
+    relay_peers: []const core.types.PeerId,
 
     pub fn deinit(self: *RuntimeConfig, allocator: std.mem.Allocator) void {
         allocator.free(self.node_config.allowlist);
         for (self.node_config.bootstrap_peers) |peer| allocator.free(peer.address);
         allocator.free(self.node_config.bootstrap_peers);
+        allocator.free(self.relay_peers);
         self.* = undefined;
     }
 };
@@ -37,6 +39,8 @@ pub fn load(allocator: std.mem.Allocator, config_path: []const u8) !RuntimeConfi
     errdefer allocator.free(allowlist);
     const bootstrap_peers = try loadBootstrapPeers(allocator, parsed.bootstrap_peers);
     errdefer allocator.free(bootstrap_peers);
+    const relay_peers = try loadRelayPeers(allocator, parsed.allowed_peers);
+    errdefer allocator.free(relay_peers);
 
     return .{
         .node_config = .{
@@ -66,6 +70,7 @@ pub fn load(allocator: std.mem.Allocator, config_path: []const u8) !RuntimeConfi
             .allowed_peers = allowlist,
         },
         .startup_bootstrap_peers = bootstrap_peers,
+        .relay_peers = relay_peers,
     };
 }
 
@@ -113,6 +118,22 @@ fn loadBootstrapPeers(allocator: std.mem.Allocator, bootstrap_peers: []const fil
     return peers;
 }
 
+fn loadRelayPeers(allocator: std.mem.Allocator, allowed_peers: []const file_config.FileConfig.AllowedPeer) ![]core.types.PeerId {
+    var count: usize = 0;
+    for (allowed_peers) |peer| {
+        if (peer.relay_capable) count += 1;
+    }
+
+    const peers = try allocator.alloc(core.types.PeerId, count);
+    var index: usize = 0;
+    for (allowed_peers) |peer| {
+        if (!peer.relay_capable) continue;
+        peers[index] = try parsePeerId(peer.peer_id);
+        index += 1;
+    }
+    return peers;
+}
+
 fn parsePeerId(text: []const u8) !core.types.PeerId {
     if (text.len != core.types.peer_id_len * 2) return error.InvalidConfig;
 
@@ -144,6 +165,7 @@ test "runtime config module captures a node config translation target" {
             .allowed_peers = &.{},
         },
         .startup_bootstrap_peers = &.{},
+        .relay_peers = &.{},
     };
 
     try std.testing.expectEqualStrings("devnet", cfg.node_config.network_id.encode());
@@ -181,7 +203,7 @@ test "runtime config loads node config from persisted config and identity files"
         \\[[allowed_peers]]
         \\peer_id = "{f}"
         \\prefix = "10.42.1.0/24"
-        \\relay_capable = false
+        \\relay_capable = true
         \\
         \\[policy]
         \\strict_allowlist = true
@@ -207,4 +229,6 @@ test "runtime config loads node config from persisted config and identity files"
     try std.testing.expectEqual(@as(usize, 1), loaded.node_config.bootstrap_peers.len);
     try std.testing.expectEqualStrings("udp://198.51.100.10:4100", loaded.startup_bootstrap_peers[0].address);
     try std.testing.expect(loaded.admission_policy.allows(stored.bound.peer_id));
+    try std.testing.expectEqual(@as(usize, 1), loaded.relay_peers.len);
+    try std.testing.expect(loaded.relay_peers[0].eql(stored.bound.peer_id));
 }
