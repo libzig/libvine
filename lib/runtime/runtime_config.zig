@@ -141,6 +141,7 @@ fn loadRelayPeers(allocator: std.mem.Allocator, allowed_peers: []const file_conf
 
 fn loadEnrolledPeers(allocator: std.mem.Allocator, allowed_peers: []const file_config.FileConfig.AllowedPeer) ![]@import("enrollment.zig").EnrollmentState.EnrolledPeer {
     const peers = try allocator.alloc(@import("enrollment.zig").EnrollmentState.EnrolledPeer, allowed_peers.len);
+    errdefer allocator.free(peers);
     for (allowed_peers, 0..) |peer, i| {
         peers[i] = .{
             .peer_id = try parsePeerId(peer.peer_id),
@@ -148,7 +149,29 @@ fn loadEnrolledPeers(allocator: std.mem.Allocator, allowed_peers: []const file_c
             .relay_capable = peer.relay_capable,
         };
     }
+    try validateNoPrefixOverlap(peers);
     return peers;
+}
+
+fn validateNoPrefixOverlap(peers: []const @import("enrollment.zig").EnrollmentState.EnrolledPeer) !void {
+    const prefix_policy = core.policy.PrefixPolicy{};
+    for (peers, 0..) |peer, i| {
+        for (peers[i + 1 ..]) |other| {
+            const left = core.membership.PeerMembership{
+                .peer_id = peer.peer_id,
+                .prefix = peer.prefix,
+                .epoch = core.types.MembershipEpoch.init(1),
+                .announced_at_ms = 0,
+            };
+            const right = core.membership.PeerMembership{
+                .peer_id = other.peer_id,
+                .prefix = other.prefix,
+                .epoch = core.types.MembershipEpoch.init(1),
+                .announced_at_ms = 0,
+            };
+            if (prefix_policy.conflicts(left, right)) return error.InvalidConfig;
+        }
+    }
 }
 
 fn parsePeerId(text: []const u8) !core.types.PeerId {
@@ -380,4 +403,50 @@ test "runtime config keeps identity and configured prefix as distinct concerns" 
     try std.testing.expect(loaded_a.node_config.local_peer_id.?.eql(stored.bound.peer_id));
     try std.testing.expect(loaded_b.node_config.local_peer_id.?.eql(stored.bound.peer_id));
     try std.testing.expect(!loaded_a.local_membership.prefix.network.eql(loaded_b.local_membership.prefix.network));
+}
+
+test "runtime config rejects overlapping configured peer prefixes" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const root = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(root);
+    const identity_path = try std.fmt.allocPrint(std.testing.allocator, "{s}/identity", .{root});
+    defer std.testing.allocator.free(identity_path);
+    _ = try identity_store.generateAndWrite(identity_path);
+
+    const peer_a = core.types.PeerId.init(.{0x41} ** core.types.peer_id_len);
+    const peer_b = core.types.PeerId.init(.{0x42} ** core.types.peer_id_len);
+
+    const config_path = try std.fmt.allocPrint(std.testing.allocator, "{s}/bad.toml", .{root});
+    defer std.testing.allocator.free(config_path);
+    const config_body = try std.fmt.allocPrint(
+        std.testing.allocator,
+        \\[node]
+        \\name = "alpha"
+        \\network_id = "home-net"
+        \\identity_path = "{s}"
+        \\
+        \\[tun]
+        \\name = "vine0"
+        \\address = "10.42.0.1"
+        \\prefix_len = 24
+        \\mtu = 1400
+        \\
+        \\[[allowed_peers]]
+        \\peer_id = "{f}"
+        \\prefix = "10.42.1.0/24"
+        \\relay_capable = false
+        \\
+        \\[[allowed_peers]]
+        \\peer_id = "{f}"
+        \\prefix = "10.42.1.128/25"
+        \\relay_capable = false
+        ,
+        .{ identity_path, peer_a, peer_b },
+    );
+    defer std.testing.allocator.free(config_body);
+    try tmp.dir.writeFile(.{ .sub_path = "bad.toml", .data = config_body });
+
+    try std.testing.expectError(error.InvalidConfig, load(std.testing.allocator, config_path));
 }
