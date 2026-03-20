@@ -23,7 +23,7 @@ pub fn run(args: []const []const u8, default_identity_path: []const u8) !void {
         .init => try handleInit(args[1..], default_identity_path),
         .show => try handleShow(args[1..], default_identity_path),
         .export_public => try handleExportPublic(args[1..], default_identity_path),
-        .fingerprint => std.debug.print("vine identity: subcommand not implemented yet\n", .{}),
+        .fingerprint => try handleFingerprint(args[1..], default_identity_path),
     }
 }
 
@@ -69,6 +69,12 @@ fn handleExportPublic(args: []const []const u8, default_identity_path: []const u
         did,
         std.fmt.bytesToHex(stored.bound.key_pair.public_key, .lower),
     });
+}
+
+fn handleFingerprint(args: []const []const u8, default_identity_path: []const u8) !void {
+    const identity_path = try parseIdentityPath(args, default_identity_path);
+    const stored = try identity_store.readFile(std.heap.page_allocator, identity_path);
+    std.debug.print("{s}\n", .{stored.bound.node_id.toHex()});
 }
 
 fn parseIdentityPath(args: []const []const u8, default_identity_path: []const u8) ![]const u8 {
