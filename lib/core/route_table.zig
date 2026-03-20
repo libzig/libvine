@@ -154,3 +154,76 @@ test "route table updates matching prefixes" {
     try std.testing.expect(selected.peer_id.eql(types.PeerId.init(.{7} ** types.peer_id_len)));
     try std.testing.expectEqual(RouteEntry.Preference.direct_after_signaling, selected.preference);
 }
+
+test "route table stress handles overlapping updates" {
+    var entries = [_]RouteEntry{
+        .{
+            .prefix = try types.VinePrefix.parse("10.100.0.0/24"),
+            .peer_id = types.PeerId.init(.{1} ** types.peer_id_len),
+            .session_id = types.SessionId.init(10),
+            .epoch = types.MembershipEpoch.init(1),
+            .preference = .relay,
+            .generation = 1,
+        },
+        .{
+            .prefix = try types.VinePrefix.parse("10.100.0.0/24"),
+            .peer_id = types.PeerId.init(.{2} ** types.peer_id_len),
+            .session_id = types.SessionId.init(11),
+            .epoch = types.MembershipEpoch.init(1),
+            .preference = .direct,
+            .generation = 1,
+        },
+    };
+    var table = RouteTable.init(&entries);
+
+    try table.upsert(.{
+        .prefix = try types.VinePrefix.parse("10.100.0.0/24"),
+        .peer_id = types.PeerId.init(.{9} ** types.peer_id_len),
+        .session_id = types.SessionId.init(12),
+        .epoch = types.MembershipEpoch.init(2),
+        .preference = .direct_after_signaling,
+        .generation = 2,
+    });
+    try table.upsert(.{
+        .prefix = try types.VinePrefix.parse("10.100.0.0/24"),
+        .peer_id = types.PeerId.init(.{8} ** types.peer_id_len),
+        .session_id = types.SessionId.init(13),
+        .epoch = types.MembershipEpoch.init(3),
+        .preference = .direct,
+        .generation = 3,
+    });
+
+    const selected = table.lookup(try types.VineAddress.parse("10.100.0.7")).?;
+    try std.testing.expect(selected.peer_id.eql(types.PeerId.init(.{8} ** types.peer_id_len)));
+    try std.testing.expectEqual(RouteEntry.Preference.direct, selected.preference);
+}
+
+test "route table stress handles rapid withdraw and reinstall" {
+    var entries = [_]RouteEntry{
+        .{
+            .prefix = try types.VinePrefix.parse("10.101.0.0/24"),
+            .peer_id = types.PeerId.init(.{3} ** types.peer_id_len),
+            .session_id = types.SessionId.init(20),
+            .epoch = types.MembershipEpoch.init(1),
+            .preference = .direct,
+            .generation = 1,
+        },
+    };
+    var table = RouteTable.init(&entries);
+    const prefix = try types.VinePrefix.parse("10.101.0.0/24");
+
+    for (0..4) |generation| {
+        try std.testing.expect(table.withdraw(prefix));
+        try std.testing.expect(table.entries[0].tombstone);
+
+        try table.upsert(.{
+            .prefix = prefix,
+            .peer_id = types.PeerId.init(.{4} ** types.peer_id_len),
+            .session_id = types.SessionId.init(@as(u64, 30) + generation),
+            .epoch = types.MembershipEpoch.init(@as(u64, 2) + generation),
+            .preference = .direct_after_signaling,
+            .generation = @as(u64, 2) + generation,
+        });
+        try std.testing.expect(!table.entries[0].tombstone);
+    }
+}
