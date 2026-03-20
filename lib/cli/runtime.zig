@@ -5,6 +5,16 @@ const daemon = @import("../daemon/runtime.zig");
 const integration = @import("../integration/integration.zig");
 const runtime = @import("../runtime/runtime.zig");
 
+const DiagnosticsSnapshot = struct {
+    daemon_phase: daemon.DaemonPhase,
+    daemon_pid: ?std.process.Child.Id,
+    network_id: core.types.NetworkId,
+    local_peer_id: core.types.PeerId,
+    local_prefix: core.types.VinePrefix,
+    peer_count: usize,
+    bootstrap_count: usize,
+};
+
 pub fn runUp(args: []const []const u8, default_config_path: []const u8) !void {
     const config_path = try parseConfigPath(args, default_config_path);
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -63,6 +73,16 @@ pub fn runDown(args: []const []const u8, pidfile_path: []const u8) !void {
         else => return err,
     };
     std.debug.print("vine down\npid={d}\n", .{pid});
+}
+
+pub fn runStatus(args: []const []const u8, default_config_path: []const u8, state_path: []const u8) !void {
+    const config_path = try parseConfigPath(args, default_config_path);
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const snapshot = try buildDiagnosticsSnapshot(allocator, config_path, state_path);
+    try printStatus(snapshot);
 }
 
 pub fn runSessions(args: []const []const u8, default_config_path: []const u8) !void {
@@ -148,6 +168,56 @@ fn renderSessions(
     }
 }
 
+fn buildDiagnosticsSnapshot(
+    allocator: std.mem.Allocator,
+    config_path: []const u8,
+    state_path: []const u8,
+) !DiagnosticsSnapshot {
+    var runtime_cfg = try runtime.runtime_config.load(allocator, config_path);
+    defer runtime_cfg.deinit(allocator);
+
+    const daemon_snapshot = daemon.readStateFile(allocator, state_path) catch daemon.Snapshot{
+        .phase = .stopped,
+        .config_path = null,
+        .pid = null,
+    };
+    defer if (daemon_snapshot.config_path != null) {
+        var mutable = daemon_snapshot;
+        daemon.deinitSnapshot(allocator, &mutable);
+    };
+
+    return .{
+        .daemon_phase = daemon_snapshot.phase,
+        .daemon_pid = daemon_snapshot.pid,
+        .network_id = runtime_cfg.node_config.network_id,
+        .local_peer_id = runtime_cfg.local_membership.peer_id,
+        .local_prefix = runtime_cfg.local_membership.prefix,
+        .peer_count = runtime_cfg.enrolled_peers.len,
+        .bootstrap_count = runtime_cfg.startup_bootstrap_peers.len,
+    };
+}
+
+fn printStatus(snapshot: DiagnosticsSnapshot) !void {
+    var prefix_buffer: [32]u8 = undefined;
+    const prefix_text = try std.fmt.bufPrint(
+        &prefix_buffer,
+        "{f}/{d}",
+        .{ snapshot.local_prefix.network, snapshot.local_prefix.prefix_len },
+    );
+    std.debug.print(
+        "vine status\nphase={s}\npid={?d}\nnetwork_id={s}\npeer_id={f}\nprefix={s}\npeers={d}\nbootstrap_peers={d}\n",
+        .{
+            @tagName(snapshot.daemon_phase),
+            snapshot.daemon_pid,
+            snapshot.network_id.encode(),
+            snapshot.local_peer_id,
+            prefix_text,
+            snapshot.peer_count,
+            snapshot.bootstrap_count,
+        },
+    );
+}
+
 fn preferenceLabel(preference: core.route_table.RouteEntry.Preference) []const u8 {
     return switch (preference) {
         .direct => "direct",
@@ -218,4 +288,61 @@ test "runtime cli renders session state through vine sessions" {
     try std.testing.expect(std.mem.indexOf(u8, buffer.items, "vine sessions") != null);
     try std.testing.expect(std.mem.indexOf(u8, buffer.items, "signaling=1") != null);
     try std.testing.expect(std.mem.indexOf(u8, buffer.items, "relay=1") != null);
+}
+
+test "runtime cli builds status diagnostics snapshot" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const root = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(root);
+    const identity_path = try std.fmt.allocPrint(std.testing.allocator, "{s}/identity", .{root});
+    defer std.testing.allocator.free(identity_path);
+    const stored = try @import("../config/identity_store.zig").generateAndWrite(identity_path);
+
+    const config_path = try std.fmt.allocPrint(std.testing.allocator, "{s}/vine.toml", .{root});
+    defer std.testing.allocator.free(config_path);
+    const state_path = try std.fmt.allocPrint(std.testing.allocator, "{s}/state.txt", .{root});
+    defer std.testing.allocator.free(state_path);
+    try tmp.dir.writeFile(.{
+        .sub_path = "state.txt",
+        .data = "phase=running\npid=4242\nconfig_path=/etc/libvine/vine.toml\n",
+    });
+
+    const config_body = try std.fmt.allocPrint(
+        std.testing.allocator,
+        \\[node]
+        \\name = "alpha"
+        \\network_id = "home-net"
+        \\identity_path = "{s}"
+        \\
+        \\[tun]
+        \\name = "vine0"
+        \\address = "10.42.0.1"
+        \\prefix_len = 24
+        \\mtu = 1400
+        \\
+        \\[[bootstrap_peers]]
+        \\peer_id = "{f}"
+        \\address = "udp://198.51.100.10:4100"
+        \\
+        \\[[allowed_peers]]
+        \\peer_id = "{f}"
+        \\prefix = "10.42.1.0/24"
+        \\relay_capable = true
+        \\
+        \\[policy]
+        \\strict_allowlist = true
+        \\allow_relay = true
+        \\allow_signaling_upgrade = true
+    , .{ identity_path, stored.bound.peer_id, stored.bound.peer_id });
+    defer std.testing.allocator.free(config_body);
+    try tmp.dir.writeFile(.{ .sub_path = "vine.toml", .data = config_body });
+
+    const snapshot = try buildDiagnosticsSnapshot(std.testing.allocator, config_path, state_path);
+    try std.testing.expectEqual(daemon.DaemonPhase.running, snapshot.daemon_phase);
+    try std.testing.expectEqual(@as(?std.process.Child.Id, 4242), snapshot.daemon_pid);
+    try std.testing.expect(snapshot.local_peer_id.eql(stored.bound.peer_id));
+    try std.testing.expectEqual(@as(usize, 1), snapshot.peer_count);
+    try std.testing.expectEqual(@as(usize, 1), snapshot.bootstrap_count);
 }
