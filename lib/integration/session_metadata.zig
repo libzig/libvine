@@ -68,7 +68,15 @@ pub fn decode(data: []const u8) VineError!SessionMetadata {
 }
 
 pub fn validateCompatibility(local: SessionMetadata, remote: SessionMetadata) VineError!void {
+    try rejectWrongOverlay(local, remote);
+    try rejectIncompatibleMajorVersion(local, remote);
+}
+
+pub fn rejectWrongOverlay(local: SessionMetadata, remote: SessionMetadata) VineError!void {
     if (!local.network_id.eql(remote.network_id)) return VineError.NetworkMismatch;
+}
+
+pub fn rejectIncompatibleMajorVersion(local: SessionMetadata, remote: SessionMetadata) VineError!void {
     if (local.transport_version_major != remote.transport_version_major) return VineError.VersionMismatch;
 }
 
