@@ -28,6 +28,14 @@ pub const Event = union(enum) {
 
 pub const EventCallback = *const fn (?*anyopaque, Event) void;
 
+pub const DiagnosticsCounters = struct {
+    packets_sent: usize = 0,
+    packets_received: usize = 0,
+    route_misses: usize = 0,
+    session_failures: usize = 0,
+    fallback_transitions: usize = 0,
+};
+
 pub const Node = struct {
     config: config.NodeConfig,
     local_peer_id: core.types.PeerId,
@@ -42,6 +50,7 @@ pub const Node = struct {
     advertised_local_membership: bool = false,
     event_callback: ?EventCallback = null,
     event_context: ?*anyopaque = null,
+    diagnostics: DiagnosticsCounters = .{},
 
     pub fn init(node_config: config.NodeConfig, buffers: RuntimeBuffers) !Node {
         var tun = try linux.tun.TunDevice.open();
@@ -133,6 +142,52 @@ pub const Node = struct {
             }
         }
         return false;
+    }
+
+    pub fn sendPacket(self: *Node, packet: []const u8) ?core.types.SessionId {
+        const forwarder = core.forwarder.Forwarder{
+            .routes = &self.route_table,
+            .sessions = &self.session_table,
+            .tun = &self.tun,
+            .local_peer_id = self.local_peer_id,
+        };
+        const session = forwarder.forwardOutbound(packet) orelse {
+            self.diagnostics.route_misses += 1;
+            return null;
+        };
+        self.diagnostics.packets_sent += 1;
+        return session.session_id;
+    }
+
+    pub fn receivePacket(self: *Node, source_peer_id: core.types.PeerId, packet: []const u8) bool {
+        const forwarder = core.forwarder.Forwarder{
+            .routes = &self.route_table,
+            .sessions = &self.session_table,
+            .tun = &self.tun,
+            .local_peer_id = self.local_peer_id,
+        };
+        if (!forwarder.forwardInbound(source_peer_id, packet)) {
+            self.diagnostics.session_failures += 1;
+            return false;
+        }
+        self.diagnostics.packets_received += 1;
+        return true;
+    }
+
+    pub fn cleanupStaleSession(self: *Node, peer_id: core.types.PeerId) bool {
+        var forwarder = core.forwarder.Forwarder{
+            .routes = &self.route_table,
+            .sessions = &self.session_table,
+            .tun = &self.tun,
+            .local_peer_id = self.local_peer_id,
+        };
+        const had_fallback = self.session_table.fallbackToRelay(peer_id) != null;
+        if (!forwarder.cleanupStaleSession(peer_id)) {
+            self.diagnostics.session_failures += 1;
+            return false;
+        }
+        if (had_fallback) self.diagnostics.fallback_transitions += 1;
+        return true;
     }
 
     fn emit(self: *Node, event: Event) void {
@@ -560,4 +615,57 @@ test "integration relay fallback continues carrying packets after direct session
     };
     try std.testing.expectEqual(@as(u64, 62), node.session_table.preferredForPeer(peer).?.session_id.value);
     try std.testing.expect(forwarder.forwardInbound(peer, &packet));
+}
+
+test "node diagnostics counters track packet flow misses failures and fallback" {
+    const peer = core.types.PeerId.init(.{0x91} ** core.types.peer_id_len);
+    var routes = [_]core.route_table.RouteEntry{
+        .{
+            .prefix = try core.types.VinePrefix.parse("10.113.0.0/24"),
+            .peer_id = peer,
+            .session_id = core.types.SessionId.init(71),
+            .epoch = core.types.MembershipEpoch.init(1),
+            .preference = .direct,
+        },
+    };
+    var sessions = [_]core.session_table.ActiveSession{
+        .{
+            .peer_id = peer,
+            .session_id = core.types.SessionId.init(71),
+            .preference = .direct,
+        },
+        .{
+            .peer_id = peer,
+            .session_id = core.types.SessionId.init(72),
+            .preference = .relay,
+        },
+    };
+    var memberships = [_]core.membership.PeerMembership{};
+
+    var node = try Node.init(.{
+        .network_id = try core.types.NetworkId.init("devnet"),
+        .tun = .{
+            .ifname = [_]u8{ 'v', 'n', 'b', '0' } ++ ([_]u8{0} ** 12),
+            .local_address = core.types.VineAddress.init(.{ 10, 106, 0, 1 }),
+            .prefix_len = 24,
+        },
+    }, .{
+        .routes = &routes,
+        .sessions = &sessions,
+        .memberships = &memberships,
+    });
+    const packet = @import("../testing/fixtures.zig").packet(.{ 10, 106, 0, 1 }, .{ 10, 113, 0, 5 });
+    const miss_packet = @import("../testing/fixtures.zig").packet(.{ 10, 106, 0, 1 }, .{ 10, 200, 0, 5 });
+
+    try std.testing.expectEqual(@as(u64, 71), node.sendPacket(&packet).?.value);
+    try std.testing.expect(node.receivePacket(peer, &packet));
+    try std.testing.expect(node.sendPacket(&miss_packet) == null);
+    try std.testing.expect(!node.receivePacket(core.types.PeerId.init(.{0x92} ** core.types.peer_id_len), &packet));
+    try std.testing.expect(node.cleanupStaleSession(peer));
+
+    try std.testing.expectEqual(@as(usize, 1), node.diagnostics.packets_sent);
+    try std.testing.expectEqual(@as(usize, 1), node.diagnostics.packets_received);
+    try std.testing.expectEqual(@as(usize, 1), node.diagnostics.route_misses);
+    try std.testing.expectEqual(@as(usize, 1), node.diagnostics.session_failures);
+    try std.testing.expectEqual(@as(usize, 1), node.diagnostics.fallback_transitions);
 }
