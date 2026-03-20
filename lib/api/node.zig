@@ -36,6 +36,19 @@ pub const DiagnosticsCounters = struct {
     fallback_transitions: usize = 0,
 };
 
+pub const SessionTableSnapshot = struct {
+    sessions: []const core.session_table.ActiveSession,
+};
+
+pub const NodeSnapshot = struct {
+    running: bool,
+    local_peer_id: core.types.PeerId,
+    diagnostics: DiagnosticsCounters,
+    session_table: SessionTableSnapshot,
+    local_prefix: ?core.types.VinePrefix,
+    advertised_prefixes: []const core.membership.PeerMembership,
+};
+
 pub const Node = struct {
     config: config.NodeConfig,
     local_peer_id: core.types.PeerId,
@@ -188,6 +201,19 @@ pub const Node = struct {
         }
         if (had_fallback) self.diagnostics.fallback_transitions += 1;
         return true;
+    }
+
+    pub fn debugSnapshot(self: *const Node) NodeSnapshot {
+        return .{
+            .running = self.running,
+            .local_peer_id = self.local_peer_id,
+            .diagnostics = self.diagnostics,
+            .session_table = .{
+                .sessions = self.session_table.sessions,
+            },
+            .local_prefix = if (self.local_membership) |membership| membership.prefix else null,
+            .advertised_prefixes = self.remote_memberships,
+        };
     }
 
     fn emit(self: *Node, event: Event) void {
@@ -668,4 +694,45 @@ test "node diagnostics counters track packet flow misses failures and fallback" 
     try std.testing.expectEqual(@as(usize, 1), node.diagnostics.route_misses);
     try std.testing.expectEqual(@as(usize, 1), node.diagnostics.session_failures);
     try std.testing.expectEqual(@as(usize, 1), node.diagnostics.fallback_transitions);
+}
+
+test "node debug snapshot exposes node state sessions and advertised prefixes" {
+    const peer = core.types.PeerId.init(.{0x93} ** core.types.peer_id_len);
+    var routes = [_]core.route_table.RouteEntry{};
+    var sessions = [_]core.session_table.ActiveSession{
+        .{
+            .peer_id = peer,
+            .session_id = core.types.SessionId.init(81),
+            .preference = .relay,
+        },
+    };
+    var memberships = [_]core.membership.PeerMembership{
+        .{
+            .peer_id = peer,
+            .prefix = try core.types.VinePrefix.parse("10.114.0.0/24"),
+            .epoch = core.types.MembershipEpoch.init(2),
+            .announced_at_ms = 5,
+        },
+    };
+
+    var node = try Node.init(.{
+        .network_id = try core.types.NetworkId.init("devnet"),
+        .tun = .{
+            .ifname = [_]u8{ 'v', 'n', 'c', '0' } ++ ([_]u8{0} ** 12),
+            .local_address = core.types.VineAddress.init(.{ 10, 105, 0, 1 }),
+            .prefix_len = 24,
+        },
+    }, .{
+        .routes = &routes,
+        .sessions = &sessions,
+        .memberships = &memberships,
+    });
+    node.start();
+
+    const snapshot = node.debugSnapshot();
+    try std.testing.expect(snapshot.running);
+    try std.testing.expect(snapshot.local_peer_id.eql(node.local_peer_id));
+    try std.testing.expectEqual(@as(usize, 1), snapshot.session_table.sessions.len);
+    try std.testing.expectEqual(@as(usize, 1), snapshot.advertised_prefixes.len);
+    try std.testing.expect(snapshot.local_prefix.?.contains(core.types.VineAddress.init(.{ 10, 105, 0, 9 })));
 }
