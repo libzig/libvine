@@ -38,4 +38,15 @@ pub const SessionTable = struct {
         }
         return selected;
     }
+
+    pub fn promote(self: *SessionTable, replacement: ActiveSession) bool {
+        for (self.sessions) |*session| {
+            if (!session.peer_id.eql(replacement.peer_id)) continue;
+            if (@intFromEnum(replacement.preference) > @intFromEnum(session.preference)) {
+                session.* = replacement;
+                return true;
+            }
+        }
+        return false;
+    }
 };
