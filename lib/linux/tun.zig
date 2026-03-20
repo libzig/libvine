@@ -12,6 +12,7 @@ pub const TunDevice = struct {
     fd: i32 = -1,
     ifname: [16]u8 = [_]u8{0} ** 16,
     config: ?TunConfig = null,
+    rx_buffer: []const u8 = &.{},
 
     pub fn open() VineError!TunDevice {
         return .{ .fd = 1 };
@@ -24,6 +25,16 @@ pub const TunDevice = struct {
     pub fn applyConfig(self: *TunDevice, config: TunConfig) void {
         self.ifname = config.ifname;
         self.config = config;
+    }
+
+    pub fn loadReadBuffer(self: *TunDevice, rx_buffer: []const u8) void {
+        self.rx_buffer = rx_buffer;
+    }
+
+    pub fn readPacket(self: *TunDevice) ?[]const u8 {
+        if (self.rx_buffer.len == 0) return null;
+        defer self.rx_buffer = &.{};
+        return self.rx_buffer;
     }
 };
 
