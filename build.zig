@@ -4,17 +4,42 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const libself_dep = b.dependency("libself", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const libmesh_dep = b.dependency("libmesh", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const libdice_dep = b.dependency("libdice", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const libfast_dep = b.dependency("libfast", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
     const libvine_module = b.createModule(.{
         .root_source_file = b.path("lib/libvine.zig"),
         .target = target,
         .optimize = optimize,
     });
+    libvine_module.addImport("libself", libself_dep.module("libself"));
+    libvine_module.addImport("libmesh", libmesh_dep.module("libmesh"));
+    libvine_module.addImport("libdice", libdice_dep.module("libdice"));
+    libvine_module.addImport("libfast", libfast_dep.module("libfast"));
 
     const libvine_export = b.addModule("libvine", .{
         .root_source_file = b.path("lib/libvine.zig"),
         .target = target,
         .optimize = optimize,
     });
+    libvine_export.addImport("libself", libself_dep.module("libself"));
+    libvine_export.addImport("libmesh", libmesh_dep.module("libmesh"));
+    libvine_export.addImport("libdice", libdice_dep.module("libdice"));
+    libvine_export.addImport("libfast", libfast_dep.module("libfast"));
 
     const lib = b.addLibrary(.{
         .name = "vine",
