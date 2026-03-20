@@ -1,0 +1,24 @@
+.{
+    .name = .libvine,
+    .version = "0.0.1",
+    .dependencies = .{
+        .libself = .{
+            .path = "../libself",
+        },
+        .libmesh = .{
+            .path = "../libmesh",
+        },
+        .libdice = .{
+            .path = "../libdice",
+        },
+        .libfast = .{
+            .path = "../libfast",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "lib",
+    },
+    .fingerprint = 0xd2875f41e22f09a7,
+}
