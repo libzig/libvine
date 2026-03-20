@@ -83,4 +83,16 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(static_network_demo);
     examples_step.dependOn(&static_network_demo.step);
 
+    const two_peer_ping = b.addExecutable(.{
+        .name = "two_peer_ping",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/two_peer_ping.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    two_peer_ping.root_module.addImport("libvine", libvine_export);
+    b.installArtifact(two_peer_ping);
+    examples_step.dependOn(&two_peer_ping.step);
+
 }
