@@ -10,6 +10,10 @@ pub const field_seed = "seed";
 pub const field_public_key = "public_key";
 pub const field_peer_id = "peer_id";
 pub const field_fingerprint = "fingerprint";
+pub const StoreError = error{
+    MissingIdentityFile,
+    InvalidIdentityFile,
+};
 
 pub const StoredIdentity = struct {
     seed: [32]u8,
@@ -47,7 +51,7 @@ pub fn encode(allocator: std.mem.Allocator, stored: StoredIdentity) ![]u8 {
     );
 }
 
-pub fn decode(data: []const u8) !StoredIdentity {
+pub fn decode(data: []const u8) StoreError!StoredIdentity {
     var maybe_seed: ?[32]u8 = null;
     var saw_magic = false;
 
@@ -65,8 +69,8 @@ pub fn decode(data: []const u8) !StoredIdentity {
         }
     }
 
-    if (!saw_magic or maybe_seed == null) return error.InvalidIdentityFile;
-    return fromSeed(maybe_seed.?);
+    if (!saw_magic or maybe_seed == null) return StoreError.InvalidIdentityFile;
+    return fromSeed(maybe_seed.?) catch StoreError.InvalidIdentityFile;
 }
 
 pub fn writeFile(path: []const u8, stored: StoredIdentity) !void {
@@ -90,24 +94,30 @@ pub fn generateAndWrite(path: []const u8) !StoredIdentity {
     return stored;
 }
 
-pub fn readFile(allocator: std.mem.Allocator, path: []const u8) !StoredIdentity {
+pub fn readFile(allocator: std.mem.Allocator, path: []const u8) StoreError!StoredIdentity {
     const file = if (std.fs.path.isAbsolute(path))
-        try std.fs.openFileAbsolute(path, .{})
+        std.fs.openFileAbsolute(path, .{}) catch |err| switch (err) {
+            error.FileNotFound => return StoreError.MissingIdentityFile,
+            else => return StoreError.InvalidIdentityFile,
+        }
     else
-        try std.fs.cwd().openFile(path, .{});
+        std.fs.cwd().openFile(path, .{}) catch |err| switch (err) {
+            error.FileNotFound => return StoreError.MissingIdentityFile,
+            else => return StoreError.InvalidIdentityFile,
+        };
     defer file.close();
 
-    const data = try file.readToEndAlloc(allocator, 4096);
+    const data = file.readToEndAlloc(allocator, 4096) catch return StoreError.InvalidIdentityFile;
     defer allocator.free(data);
     return decode(data);
 }
 
-fn parseHex32(text: []const u8) ![32]u8 {
-    if (text.len != 64) return error.InvalidIdentityFile;
+fn parseHex32(text: []const u8) StoreError![32]u8 {
+    if (text.len != 64) return StoreError.InvalidIdentityFile;
 
     var bytes: [32]u8 = undefined;
     for (0..32) |i| {
-        bytes[i] = std.fmt.parseInt(u8, text[i * 2 .. i * 2 + 2], 16) catch return error.InvalidIdentityFile;
+        bytes[i] = std.fmt.parseInt(u8, text[i * 2 .. i * 2 + 2], 16) catch return StoreError.InvalidIdentityFile;
     }
     return bytes;
 }
@@ -170,4 +180,19 @@ test "identity store writes generated identities to disk" {
     var buffer: [512]u8 = undefined;
     const len = try file.readAll(&buffer);
     try std.testing.expect(std.mem.indexOf(u8, buffer[0..len], file_magic) != null);
+}
+
+test "identity store rejects missing and malformed files" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    try std.testing.expectError(StoreError.MissingIdentityFile, readFile(std.testing.allocator, "does-not-exist.identity"));
+
+    try tmp.dir.writeFile(.{ .sub_path = "bad.identity", .data = "format=wrong\nseed=oops\n" });
+    const tmp_path = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(tmp_path);
+    const full_path = try std.fmt.allocPrint(std.testing.allocator, "{s}/bad.identity", .{tmp_path});
+    defer std.testing.allocator.free(full_path);
+
+    try std.testing.expectError(StoreError.InvalidIdentityFile, readFile(std.testing.allocator, full_path));
 }
