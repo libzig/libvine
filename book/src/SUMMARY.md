@@ -9,6 +9,7 @@
 - [Enrollment](./enrollment.md)
 - [Peers and Sessions](./peers-and-sessions.md)
 - [Packet Flow](./packet-flow.md)
+- [Diagnostics](./diagnostics.md)
 - [Operations](./operations.md)
 - [Architecture](./architecture.md)
 - [MVP](./mvp.md)
