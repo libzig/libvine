@@ -1,1 +1,5 @@
-pub const placeholder = struct {};
+pub const types = @import("types.zig");
+
+test {
+    _ = types;
+}
