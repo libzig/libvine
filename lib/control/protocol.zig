@@ -26,3 +26,10 @@ pub const RouteUpdate = struct {
     prefix: types.VinePrefix,
     epoch: types.MembershipEpoch,
 };
+
+pub const RouteWithdraw = struct {
+    network_id: types.NetworkId,
+    owner: types.PeerId,
+    prefix: types.VinePrefix,
+    epoch: types.MembershipEpoch,
+};
