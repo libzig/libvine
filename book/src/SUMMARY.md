@@ -13,6 +13,7 @@
 - [Multi-PC Showcase](./showcase.md)
 - [Copying To Multiple Machines](./copying-to-machines.md)
 - [Bootstrap And Relay](./bootstrap-and-relay.md)
+- [Enrollment Across Machines](./enrollment-across-machines.md)
 - [Operations](./operations.md)
 - [Architecture](./architecture.md)
 - [MVP](./mvp.md)
