@@ -19,3 +19,10 @@ pub const JoinAnnounce = struct {
     prefix: types.VinePrefix,
     epoch: types.MembershipEpoch,
 };
+
+pub const RouteUpdate = struct {
+    network_id: types.NetworkId,
+    owner: types.PeerId,
+    prefix: types.VinePrefix,
+    epoch: types.MembershipEpoch,
+};
