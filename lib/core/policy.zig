@@ -2,8 +2,13 @@ const membership = @import("membership.zig");
 const types = @import("types.zig");
 
 pub const AdmissionPolicy = struct {
-    pub fn allows(_: AdmissionPolicy, _: types.PeerId) bool {
-        return true;
+    allowed_peers: []const types.PeerId = &.{},
+
+    pub fn allows(self: AdmissionPolicy, peer_id: types.PeerId) bool {
+        for (self.allowed_peers) |allowed| {
+            if (allowed.eql(peer_id)) return true;
+        }
+        return false;
     }
 };
 
