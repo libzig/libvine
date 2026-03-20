@@ -21,6 +21,12 @@ const PeerDiagnostics = struct {
     relay_capable: bool,
 };
 
+const RouteDiagnostics = struct {
+    prefix: core.types.VinePrefix,
+    peer_id: core.types.PeerId,
+    preference: core.route_table.RouteEntry.Preference,
+};
+
 pub fn runUp(args: []const []const u8, default_config_path: []const u8) !void {
     const config_path = try parseConfigPath(args, default_config_path);
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -103,6 +109,20 @@ pub fn runPeers(args: []const []const u8, default_config_path: []const u8) !void
     const peers = try buildPeerDiagnostics(allocator, runtime_cfg.enrolled_peers);
     defer allocator.free(peers);
     try printPeers(peers);
+}
+
+pub fn runRoutes(args: []const []const u8, default_config_path: []const u8) !void {
+    const config_path = try parseConfigPath(args, default_config_path);
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    var runtime_cfg = try runtime.runtime_config.load(allocator, config_path);
+    defer runtime_cfg.deinit(allocator);
+
+    const routes = try buildRouteDiagnostics(allocator, runtime_cfg.enrolled_peers);
+    defer allocator.free(routes);
+    try printRoutes(routes);
 }
 
 pub fn runSessions(args: []const []const u8, default_config_path: []const u8) !void {
@@ -269,6 +289,37 @@ fn printPeers(peers: []const PeerDiagnostics) !void {
     }
 }
 
+fn buildRouteDiagnostics(
+    allocator: std.mem.Allocator,
+    enrolled_peers: []const runtime.enrollment.EnrollmentState.EnrolledPeer,
+) ![]RouteDiagnostics {
+    const routes = try allocator.alloc(RouteDiagnostics, enrolled_peers.len);
+    for (enrolled_peers, 0..) |peer, i| {
+        routes[i] = .{
+            .prefix = peer.prefix,
+            .peer_id = peer.peer_id,
+            .preference = if (peer.relay_capable) .relay else .direct_after_signaling,
+        };
+    }
+    return routes;
+}
+
+fn printRoutes(routes: []const RouteDiagnostics) !void {
+    std.debug.print("vine routes\ncount={d}\n", .{routes.len});
+    for (routes) |route| {
+        var prefix_buffer: [32]u8 = undefined;
+        const prefix_text = try std.fmt.bufPrint(
+            &prefix_buffer,
+            "{f}/{d}",
+            .{ route.prefix.network, route.prefix.prefix_len },
+        );
+        std.debug.print(
+            "prefix={s}\npeer={f}\npreference={s}\n",
+            .{ prefix_text, route.peer_id, preferenceLabel(route.preference) },
+        );
+    }
+}
+
 fn preferenceLabel(preference: core.route_table.RouteEntry.Preference) []const u8 {
     return switch (preference) {
         .direct => "direct",
@@ -416,4 +467,24 @@ test "runtime cli builds peer diagnostics from enrolled peers" {
     try std.testing.expectEqual(@as(usize, 2), peers.len);
     try std.testing.expect(peers[0].prefix.contains(try core.types.VineAddress.parse("10.42.1.9")));
     try std.testing.expect(peers[1].relay_capable);
+}
+
+test "runtime cli builds route diagnostics from enrolled peers" {
+    const enrolled = [_]runtime.enrollment.EnrollmentState.EnrolledPeer{
+        .{
+            .peer_id = core.types.PeerId.init(.{0x93} ** core.types.peer_id_len),
+            .prefix = try core.types.VinePrefix.parse("10.42.3.0/24"),
+        },
+        .{
+            .peer_id = core.types.PeerId.init(.{0x94} ** core.types.peer_id_len),
+            .prefix = try core.types.VinePrefix.parse("10.42.4.0/24"),
+            .relay_capable = true,
+        },
+    };
+    const routes = try buildRouteDiagnostics(std.testing.allocator, &enrolled);
+    defer std.testing.allocator.free(routes);
+
+    try std.testing.expectEqual(@as(usize, 2), routes.len);
+    try std.testing.expectEqual(core.route_table.RouteEntry.Preference.direct_after_signaling, routes[0].preference);
+    try std.testing.expectEqual(core.route_table.RouteEntry.Preference.relay, routes[1].preference);
 }
