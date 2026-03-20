@@ -9,6 +9,16 @@ pub const RuntimeBuffers = struct {
     sessions: []core.session_table.ActiveSession,
 };
 
+pub const BootstrapSource = enum {
+    static_peers,
+    seed_records,
+};
+
+pub const BootstrapResult = struct {
+    source: BootstrapSource,
+    peer_count: usize,
+};
+
 pub const Node = struct {
     config: config.NodeConfig,
     local_peer_id: core.types.PeerId,
@@ -18,6 +28,7 @@ pub const Node = struct {
     mesh: integration.libmesh_adapter.LibmeshAdapter = integration.libmesh_adapter.LibmeshAdapter.init(),
     tun: linux.tun.TunDevice,
     running: bool = false,
+    last_bootstrap: ?BootstrapResult = null,
 
     pub fn init(node_config: config.NodeConfig, buffers: RuntimeBuffers) !Node {
         var tun = try linux.tun.TunDevice.open();
@@ -47,6 +58,29 @@ pub const Node = struct {
     pub fn stop(self: *Node) void {
         self.running = false;
         self.tun.fd = -1;
+    }
+
+    pub fn bootstrap(self: *Node) ?BootstrapResult {
+        if (self.config.bootstrap_peers.len > 0) {
+            const result = BootstrapResult{
+                .source = .static_peers,
+                .peer_count = self.config.bootstrap_peers.len,
+            };
+            self.last_bootstrap = result;
+            return result;
+        }
+
+        if (self.config.seed_records.len > 0) {
+            const result = BootstrapResult{
+                .source = .seed_records,
+                .peer_count = self.config.seed_records.len,
+            };
+            self.last_bootstrap = result;
+            return result;
+        }
+
+        self.last_bootstrap = null;
+        return null;
     }
 };
 
@@ -109,4 +143,45 @@ test "node start and stop bound runtime ownership" {
     node.stop();
     try std.testing.expect(!node.running);
     try std.testing.expectEqual(@as(i32, -1), node.tun.fd);
+}
+
+test "node bootstrap prefers static peers and falls back to seed records" {
+    var routes = [_]core.route_table.RouteEntry{};
+    var sessions = [_]core.session_table.ActiveSession{};
+    const peer = core.types.PeerId.init(.{0x42} ** core.types.peer_id_len);
+
+    var node = try Node.init(.{
+        .network_id = try core.types.NetworkId.init("devnet"),
+        .tun = .{
+            .ifname = [_]u8{ 'v', 'n', '3', 0 } ++ ([_]u8{0} ** 12),
+            .local_address = core.types.VineAddress.init(.{ 10, 62, 0, 1 }),
+            .prefix_len = 24,
+        },
+        .bootstrap_peers = &.{.{ .peer_id = peer, .address = "seed://peer-a" }},
+        .seed_records = &.{.{ .peer_id = peer, .published_prefix = try core.types.VinePrefix.parse("10.62.0.0/24") }},
+    }, .{
+        .routes = &routes,
+        .sessions = &sessions,
+    });
+
+    const static_result = node.bootstrap().?;
+    try std.testing.expectEqual(BootstrapSource.static_peers, static_result.source);
+    try std.testing.expectEqual(@as(usize, 1), static_result.peer_count);
+
+    var seed_only_node = try Node.init(.{
+        .network_id = try core.types.NetworkId.init("devnet"),
+        .tun = .{
+            .ifname = [_]u8{ 'v', 'n', '4', 0 } ++ ([_]u8{0} ** 12),
+            .local_address = core.types.VineAddress.init(.{ 10, 63, 0, 1 }),
+            .prefix_len = 24,
+        },
+        .seed_records = &.{.{ .peer_id = peer, .published_prefix = try core.types.VinePrefix.parse("10.63.0.0/24") }},
+    }, .{
+        .routes = &routes,
+        .sessions = &sessions,
+    });
+
+    const seed_result = seed_only_node.bootstrap().?;
+    try std.testing.expectEqual(BootstrapSource.seed_records, seed_result.source);
+    try std.testing.expectEqual(@as(usize, 1), seed_result.peer_count);
 }
