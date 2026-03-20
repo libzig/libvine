@@ -66,3 +66,55 @@ pub const VineAddress = struct {
         });
     }
 };
+
+pub const VinePrefix = struct {
+    network: VineAddress,
+    prefix_len: u8,
+
+    pub fn init(address: VineAddress, prefix_len: u8) !VinePrefix {
+        if (prefix_len > 32) return error.InvalidVinePrefix;
+        return .{
+            .network = masked(address, prefix_len),
+            .prefix_len = prefix_len,
+        };
+    }
+
+    pub fn parse(text: []const u8) !VinePrefix {
+        var iter = std.mem.splitScalar(u8, text, '/');
+        const address_text = iter.next() orelse return error.InvalidVinePrefix;
+        const prefix_text = iter.next() orelse return error.InvalidVinePrefix;
+        if (iter.next() != null) return error.InvalidVinePrefix;
+
+        return init(
+            try VineAddress.parse(address_text),
+            try std.fmt.parseInt(u8, prefix_text, 10),
+        );
+    }
+
+    pub fn contains(self: VinePrefix, address: VineAddress) bool {
+        return self.network.eql(masked(address, self.prefix_len));
+    }
+
+    fn masked(address: VineAddress, prefix_len: u8) VineAddress {
+        var out = address;
+        var remaining = prefix_len;
+
+        for (&out.octets) |*octet| {
+            if (remaining >= 8) {
+                remaining -= 8;
+                continue;
+            }
+            if (remaining == 0) {
+                octet.* = 0;
+                continue;
+            }
+
+            const shift: u3 = @intCast(8 - remaining);
+            const mask: u8 = @as(u8, 0xff) << shift;
+            octet.* &= mask;
+            remaining = 0;
+        }
+
+        return out;
+    }
+};
