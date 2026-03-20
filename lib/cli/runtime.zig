@@ -1054,6 +1054,29 @@ test "runtime cli counts relay usage in diagnostics counters" {
     try std.testing.expectEqual(@as(usize, 1), countSessionsByPreference(&peers, .relay));
 }
 
+test "runtime cli renders sessions in json mode for admin tooling" {
+    const sessions = [_]SessionDiagnostics{
+        .{
+            .peer_id = core.types.PeerId.init(.{0xAB} ** core.types.peer_id_len),
+            .session_id = .{ .value = 88 },
+            .mode = .relay,
+            .relay_capable = true,
+        },
+    };
+    var buffer = std.ArrayList(u8).empty;
+    defer buffer.deinit(std.testing.allocator);
+    try renderSessions(buffer.writer(std.testing.allocator), &sessions, .json);
+
+    try std.testing.expect(std.mem.indexOf(u8, buffer.items, "\"command\":\"sessions\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, buffer.items, "\"mode\":\"relay\"") != null);
+}
+
+test "runtime cli admin parsers accept status peers routes counters snapshot formats" {
+    try std.testing.expectEqual(OutputMode.json, (try parseCommonArgs(&.{ "--format", "json" }, "/etc/libvine/vine.toml")).output_mode);
+    try std.testing.expectEqual(OutputMode.text, (try parseCommonArgs(&.{ "--format", "text" }, "/etc/libvine/vine.toml")).output_mode);
+    try std.testing.expectError(error.InvalidArguments, parseCommonArgs(&.{ "--bogus" }, "/etc/libvine/vine.toml"));
+}
+
 test "runtime cli snapshot combines diagnostic sections" {
     const snapshot = DiagnosticsSnapshot{
         .daemon_phase = .running,
