@@ -42,6 +42,16 @@ const CounterDiagnostics = struct {
     fallback_transitions: usize,
 };
 
+const OutputMode = enum {
+    text,
+    json,
+};
+
+const CommonArgs = struct {
+    config_path: []const u8,
+    output_mode: OutputMode,
+};
+
 pub fn runUp(args: []const []const u8, default_config_path: []const u8) !void {
     const config_path = try parseConfigPath(args, default_config_path);
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -103,67 +113,67 @@ pub fn runDown(args: []const []const u8, pidfile_path: []const u8) !void {
 }
 
 pub fn runStatus(args: []const []const u8, default_config_path: []const u8, state_path: []const u8) !void {
-    const config_path = try parseConfigPath(args, default_config_path);
+    const parsed = try parseCommonArgs(args, default_config_path);
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const snapshot = try buildDiagnosticsSnapshot(allocator, config_path, state_path);
-    try printStatus(snapshot);
+    const snapshot = try buildDiagnosticsSnapshot(allocator, parsed.config_path, state_path);
+    try printStatus(snapshot, parsed.output_mode);
 }
 
 pub fn runPeers(args: []const []const u8, default_config_path: []const u8) !void {
-    const config_path = try parseConfigPath(args, default_config_path);
+    const parsed = try parseCommonArgs(args, default_config_path);
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    var runtime_cfg = try runtime.runtime_config.load(allocator, config_path);
+    var runtime_cfg = try runtime.runtime_config.load(allocator, parsed.config_path);
     defer runtime_cfg.deinit(allocator);
 
     const peers = try buildPeerDiagnostics(allocator, runtime_cfg.enrolled_peers);
     defer allocator.free(peers);
-    try printPeers(peers);
+    try printPeers(peers, parsed.output_mode);
 }
 
 pub fn runRoutes(args: []const []const u8, default_config_path: []const u8) !void {
-    const config_path = try parseConfigPath(args, default_config_path);
+    const parsed = try parseCommonArgs(args, default_config_path);
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    var runtime_cfg = try runtime.runtime_config.load(allocator, config_path);
+    var runtime_cfg = try runtime.runtime_config.load(allocator, parsed.config_path);
     defer runtime_cfg.deinit(allocator);
 
     const routes = try buildRouteDiagnostics(allocator, runtime_cfg.enrolled_peers);
     defer allocator.free(routes);
-    try printRoutes(routes);
+    try printRoutes(routes, parsed.output_mode);
 }
 
 pub fn runCounters(args: []const []const u8, default_config_path: []const u8) !void {
-    const config_path = try parseConfigPath(args, default_config_path);
+    const parsed = try parseCommonArgs(args, default_config_path);
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const counters = try buildCounterDiagnostics(allocator, config_path);
-    try printCounters(counters);
+    const counters = try buildCounterDiagnostics(allocator, parsed.config_path);
+    try printCounters(counters, parsed.output_mode);
 }
 
 pub fn runSnapshot(args: []const []const u8, default_config_path: []const u8, state_path: []const u8) !void {
-    const config_path = try parseConfigPath(args, default_config_path);
+    const parsed = try parseCommonArgs(args, default_config_path);
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const snapshot = try buildDiagnosticsSnapshot(allocator, config_path, state_path);
-    var runtime_cfg = try runtime.runtime_config.load(allocator, config_path);
+    const snapshot = try buildDiagnosticsSnapshot(allocator, parsed.config_path, state_path);
+    var runtime_cfg = try runtime.runtime_config.load(allocator, parsed.config_path);
     defer runtime_cfg.deinit(allocator);
     const peers = try buildPeerDiagnostics(allocator, runtime_cfg.enrolled_peers);
     defer allocator.free(peers);
     const routes = try buildRouteDiagnostics(allocator, runtime_cfg.enrolled_peers);
     defer allocator.free(routes);
-    const counters = try buildCounterDiagnostics(allocator, config_path);
+    const counters = try buildCounterDiagnostics(allocator, parsed.config_path);
 
     const managed_peers = try allocator.alloc(runtime.session_manager.ManagedPeer, runtime_cfg.enrolled_peers.len);
     defer allocator.free(managed_peers);
@@ -203,7 +213,7 @@ pub fn runSnapshot(args: []const []const u8, default_config_path: []const u8, st
     const sessions_view = try buildSessionDiagnostics(allocator, managed_peers, manager);
     defer allocator.free(sessions_view);
 
-    try printSnapshot(snapshot, peers, routes, sessions_view, counters);
+    try printSnapshot(snapshot, peers, routes, sessions_view, counters, parsed.output_mode);
 }
 
 pub fn runPing(args: []const []const u8, default_config_path: []const u8) !void {
@@ -213,16 +223,16 @@ pub fn runPing(args: []const []const u8, default_config_path: []const u8) !void 
     const allocator = gpa.allocator();
 
     const result = try buildPingDiagnostics(allocator, parsed.config_path, parsed.destination);
-    try printPing(result);
+    try printPing(result, parsed.output_mode);
 }
 
 pub fn runSessions(args: []const []const u8, default_config_path: []const u8) !void {
-    const config_path = try parseConfigPath(args, default_config_path);
+    const parsed = try parseCommonArgs(args, default_config_path);
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    var runtime_cfg = try runtime.runtime_config.load(allocator, config_path);
+    var runtime_cfg = try runtime.runtime_config.load(allocator, parsed.config_path);
     defer runtime_cfg.deinit(allocator);
 
     const managed_peers = try allocator.alloc(runtime.session_manager.ManagedPeer, runtime_cfg.enrolled_peers.len);
@@ -274,14 +284,32 @@ pub fn runSessions(args: []const []const u8, default_config_path: []const u8) !v
     defer allocator.free(sessions_view);
     var output = std.ArrayList(u8).empty;
     defer output.deinit(allocator);
-    try renderSessions(output.writer(allocator), sessions_view);
+    try renderSessions(output.writer(allocator), sessions_view, parsed.output_mode);
     std.debug.print("{s}", .{output.items});
 }
 
 fn renderSessions(
     writer: anytype,
     sessions: []const SessionDiagnostics,
+    output_mode: OutputMode,
 ) !void {
+    if (output_mode == .json) {
+        try writer.print("{{\"command\":\"sessions\",\"count\":{d},\"direct\":{d},\"signaling\":{d},\"relay\":{d},\"items\":[", .{
+            sessions.len,
+            countSessionsByPreference(sessions, .direct),
+            countSessionsByPreference(sessions, .direct_after_signaling),
+            countSessionsByPreference(sessions, .relay),
+        });
+        for (sessions, 0..) |session, i| {
+            if (i != 0) try writer.writeAll(",");
+            try writer.print(
+                "{{\"peer_id\":\"{f}\",\"mode\":\"{s}\",\"session_id\":{d},\"relay_capable\":{any}}}",
+                .{ session.peer_id, preferenceLabel(session.mode), session.session_id.value, session.relay_capable },
+            );
+        }
+        try writer.writeAll("]}\n");
+        return;
+    }
     try writer.print(
         "vine sessions\ncount={d}\ndirect={d}\nsignaling={d}\nrelay={d}\n",
         .{
@@ -358,13 +386,28 @@ fn buildDiagnosticsSnapshot(
     };
 }
 
-fn printStatus(snapshot: DiagnosticsSnapshot) !void {
+fn printStatus(snapshot: DiagnosticsSnapshot, output_mode: OutputMode) !void {
     var prefix_buffer: [32]u8 = undefined;
     const prefix_text = try std.fmt.bufPrint(
         &prefix_buffer,
         "{f}/{d}",
         .{ snapshot.local_prefix.network, snapshot.local_prefix.prefix_len },
     );
+    if (output_mode == .json) {
+        std.debug.print(
+            "{{\"command\":\"status\",\"phase\":\"{s}\",\"pid\":{?d},\"network_id\":\"{s}\",\"peer_id\":\"{f}\",\"prefix\":\"{s}\",\"peers\":{d},\"bootstrap_peers\":{d}}}\n",
+            .{
+                @tagName(snapshot.daemon_phase),
+                snapshot.daemon_pid,
+                snapshot.network_id.encode(),
+                snapshot.local_peer_id,
+                prefix_text,
+                snapshot.peer_count,
+                snapshot.bootstrap_count,
+            },
+        );
+        return;
+    }
     std.debug.print(
         "vine status\nphase={s}\npid={?d}\nnetwork_id={s}\npeer_id={f}\nprefix={s}\npeers={d}\nbootstrap_peers={d}\n",
         .{
@@ -394,7 +437,21 @@ fn buildPeerDiagnostics(
     return peers;
 }
 
-fn printPeers(peers: []const PeerDiagnostics) !void {
+fn printPeers(peers: []const PeerDiagnostics, output_mode: OutputMode) !void {
+    if (output_mode == .json) {
+        std.debug.print("{{\"command\":\"peers\",\"count\":{d},\"items\":[", .{peers.len});
+        for (peers, 0..) |peer, i| {
+            var prefix_buffer: [32]u8 = undefined;
+            const prefix_text = try std.fmt.bufPrint(&prefix_buffer, "{f}/{d}", .{ peer.prefix.network, peer.prefix.prefix_len });
+            if (i != 0) std.debug.print(",", .{});
+            std.debug.print(
+                "{{\"peer_id\":\"{f}\",\"prefix\":\"{s}\",\"relay_capable\":{any}}}",
+                .{ peer.peer_id, prefix_text, peer.relay_capable },
+            );
+        }
+        std.debug.print("]}}\n", .{});
+        return;
+    }
     std.debug.print("vine peers\ncount={d}\n", .{peers.len});
     for (peers) |peer| {
         var prefix_buffer: [32]u8 = undefined;
@@ -425,7 +482,21 @@ fn buildRouteDiagnostics(
     return routes;
 }
 
-fn printRoutes(routes: []const RouteDiagnostics) !void {
+fn printRoutes(routes: []const RouteDiagnostics, output_mode: OutputMode) !void {
+    if (output_mode == .json) {
+        std.debug.print("{{\"command\":\"routes\",\"count\":{d},\"items\":[", .{routes.len});
+        for (routes, 0..) |route, i| {
+            var prefix_buffer: [32]u8 = undefined;
+            const prefix_text = try std.fmt.bufPrint(&prefix_buffer, "{f}/{d}", .{ route.prefix.network, route.prefix.prefix_len });
+            if (i != 0) std.debug.print(",", .{});
+            std.debug.print(
+                "{{\"prefix\":\"{s}\",\"peer_id\":\"{f}\",\"preference\":\"{s}\"}}",
+                .{ prefix_text, route.peer_id, preferenceLabel(route.preference) },
+            );
+        }
+        std.debug.print("]}}\n", .{});
+        return;
+    }
     std.debug.print("vine routes\ncount={d}\n", .{routes.len});
     for (routes) |route| {
         var prefix_buffer: [32]u8 = undefined;
@@ -473,7 +544,20 @@ fn buildCounterDiagnostics(
     };
 }
 
-fn printCounters(counters: CounterDiagnostics) !void {
+fn printCounters(counters: CounterDiagnostics, output_mode: OutputMode) !void {
+    if (output_mode == .json) {
+        std.debug.print(
+            "{{\"command\":\"counters\",\"packets_sent\":{d},\"packets_received\":{d},\"route_misses\":{d},\"session_failures\":{d},\"fallback_transitions\":{d}}}\n",
+            .{
+                counters.packets_sent,
+                counters.packets_received,
+                counters.route_misses,
+                counters.session_failures,
+                counters.fallback_transitions,
+            },
+        );
+        return;
+    }
     std.debug.print(
         "vine counters\npackets_sent={d}\npackets_received={d}\nroute_misses={d}\nsession_failures={d}\nfallback_transitions={d}\n",
         .{
@@ -492,20 +576,33 @@ fn printSnapshot(
     routes: []const RouteDiagnostics,
     sessions: []const SessionDiagnostics,
     counters: CounterDiagnostics,
+    output_mode: OutputMode,
 ) !void {
-    try printStatus(snapshot);
-    try printPeers(peers);
-    try printRoutes(routes);
+    if (output_mode == .json) {
+        try printStatus(snapshot, .json);
+        try printPeers(peers, .json);
+        try printRoutes(routes, .json);
+        var buffer_json = std.ArrayList(u8).empty;
+        defer buffer_json.deinit(std.heap.page_allocator);
+        try renderSessions(buffer_json.writer(std.heap.page_allocator), sessions, .json);
+        std.debug.print("{s}", .{buffer_json.items});
+        try printCounters(counters, .json);
+        return;
+    }
+    try printStatus(snapshot, output_mode);
+    try printPeers(peers, output_mode);
+    try printRoutes(routes, output_mode);
     var buffer = std.ArrayList(u8).empty;
     defer buffer.deinit(std.heap.page_allocator);
-    try renderSessions(buffer.writer(std.heap.page_allocator), sessions);
+    try renderSessions(buffer.writer(std.heap.page_allocator), sessions, output_mode);
     std.debug.print("{s}", .{buffer.items});
-    try printCounters(counters);
+    try printCounters(counters, output_mode);
 }
 
 const PingArgs = struct {
     config_path: []const u8,
     destination: core.types.VineAddress,
+    output_mode: OutputMode,
 };
 
 const PingDiagnostics = struct {
@@ -518,6 +615,7 @@ const PingDiagnostics = struct {
 fn parsePingArgs(args: []const []const u8, default_config_path: []const u8) !PingArgs {
     var config_path = default_config_path;
     var destination: ?core.types.VineAddress = null;
+    var output_mode: OutputMode = .text;
     var i: usize = 0;
     while (i < args.len) : (i += 1) {
         if (std.mem.eql(u8, args[i], "-c") or std.mem.eql(u8, args[i], "--config")) {
@@ -526,12 +624,19 @@ fn parsePingArgs(args: []const []const u8, default_config_path: []const u8) !Pin
             config_path = args[i];
             continue;
         }
+        if (std.mem.eql(u8, args[i], "--format")) {
+            i += 1;
+            if (i >= args.len) return error.InvalidArguments;
+            output_mode = parseOutputMode(args[i]) orelse return error.InvalidArguments;
+            continue;
+        }
         if (destination != null) return error.InvalidArguments;
         destination = try core.types.VineAddress.parse(args[i]);
     }
     return .{
         .config_path = config_path,
         .destination = destination orelse return error.InvalidArguments,
+        .output_mode = output_mode,
     };
 }
 
@@ -603,7 +708,19 @@ fn seedPingSessions(
     }
 }
 
-fn printPing(result: PingDiagnostics) !void {
+fn printPing(result: PingDiagnostics, output_mode: OutputMode) !void {
+    if (output_mode == .json) {
+        std.debug.print(
+            "{{\"command\":\"ping\",\"destination\":\"{f}\",\"peer_id\":\"{f}\",\"session_id\":{d},\"mode\":\"{s}\"}}\n",
+            .{
+                result.destination,
+                result.peer_id,
+                result.session_id.value,
+                preferenceLabel(result.mode),
+            },
+        );
+        return;
+    }
     std.debug.print(
         "vine ping\ndestination={f}\npeer={f}\nsession_id={d}\nmode={s}\n",
         .{
@@ -613,6 +730,34 @@ fn printPing(result: PingDiagnostics) !void {
             preferenceLabel(result.mode),
         },
     );
+}
+
+fn parseCommonArgs(args: []const []const u8, default_config_path: []const u8) !CommonArgs {
+    var config_path = default_config_path;
+    var output_mode: OutputMode = .text;
+    var i: usize = 0;
+    while (i < args.len) : (i += 1) {
+        if (std.mem.eql(u8, args[i], "-c") or std.mem.eql(u8, args[i], "--config")) {
+            i += 1;
+            if (i >= args.len) return error.InvalidArguments;
+            config_path = args[i];
+            continue;
+        }
+        if (std.mem.eql(u8, args[i], "--format")) {
+            i += 1;
+            if (i >= args.len) return error.InvalidArguments;
+            output_mode = parseOutputMode(args[i]) orelse return error.InvalidArguments;
+            continue;
+        }
+        return error.InvalidArguments;
+    }
+    return .{ .config_path = config_path, .output_mode = output_mode };
+}
+
+fn parseOutputMode(text: []const u8) ?OutputMode {
+    if (std.mem.eql(u8, text, "text")) return .text;
+    if (std.mem.eql(u8, text, "json")) return .json;
+    return null;
 }
 
 fn preferenceLabel(preference: core.route_table.RouteEntry.Preference) []const u8 {
@@ -649,6 +794,12 @@ test "runtime cli up config path defaults and overrides" {
     );
 }
 
+test "runtime cli parses common args with json format" {
+    const parsed = try parseCommonArgs(&.{ "-c", "/tmp/vine.toml", "--format", "json" }, "/etc/libvine/vine.toml");
+    try std.testing.expectEqualStrings("/tmp/vine.toml", parsed.config_path);
+    try std.testing.expectEqual(OutputMode.json, parsed.output_mode);
+}
+
 test "runtime cli down rejects unexpected arguments" {
     try std.testing.expectError(error.InvalidArguments, runDown(&.{ "--now" }, "/run/libvine/vine.pid"));
 }
@@ -682,7 +833,7 @@ test "runtime cli renders session state through vine sessions" {
 
     var buffer = std.ArrayList(u8).empty;
     defer buffer.deinit(std.testing.allocator);
-    try renderSessions(buffer.writer(std.testing.allocator), session_view);
+    try renderSessions(buffer.writer(std.testing.allocator), session_view, .text);
 
     try std.testing.expect(std.mem.indexOf(u8, buffer.items, "vine sessions") != null);
     try std.testing.expect(std.mem.indexOf(u8, buffer.items, "signaling=1") != null);
@@ -870,13 +1021,14 @@ test "runtime cli snapshot combines diagnostic sections" {
         .route_misses = 0,
         .session_failures = 0,
         .fallback_transitions = 0,
-    });
+    }, .text);
 }
 
 test "runtime cli parses ping arguments" {
-    const parsed = try parsePingArgs(&.{ "-c", "/tmp/vine.toml", "10.42.9.7" }, "/etc/libvine/vine.toml");
+    const parsed = try parsePingArgs(&.{ "-c", "/tmp/vine.toml", "--format", "json", "10.42.9.7" }, "/etc/libvine/vine.toml");
     try std.testing.expectEqualStrings("/tmp/vine.toml", parsed.config_path);
     try std.testing.expect(parsed.destination.eql(try core.types.VineAddress.parse("10.42.9.7")));
+    try std.testing.expectEqual(OutputMode.json, parsed.output_mode);
     try std.testing.expectError(error.InvalidArguments, parsePingArgs(&.{}, "/etc/libvine/vine.toml"));
 }
 
