@@ -19,4 +19,15 @@ pub const PrefixPolicy = struct {
         _ = record;
         return self.allow_primary_only;
     }
+
+    pub fn conflicts(
+        _: PrefixPolicy,
+        incoming: membership.PeerMembership,
+        existing: membership.PeerMembership,
+    ) bool {
+        if (incoming.peer_id.eql(existing.peer_id)) return false;
+
+        return incoming.prefix.contains(existing.prefix.network) or
+            existing.prefix.contains(incoming.prefix.network);
+    }
 };
