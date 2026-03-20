@@ -1,5 +1,6 @@
 const frame = @import("frame.zig");
 const control_codec = @import("control_codec.zig");
+const packet_codec = @import("packet_codec.zig");
 const types = @import("../core/types.zig");
 const protocol = @import("../control/protocol.zig");
 const VineError = @import("../common/error.zig").VineError;
@@ -25,6 +26,20 @@ pub const Session = struct {
             .header = .{
                 .kind = .control,
                 .flags = .{ .control_priority = true },
+                .session_id = self.session_id.value,
+                .payload_len = @intCast(payload.len),
+            },
+            .payload = payload,
+        };
+    }
+
+    pub fn sendPacket(self: Session, allocator: std.mem.Allocator, packet: []const u8) VineError!EncodedFrame {
+        const payload = try packet_codec.encodeAlloc(allocator, packet);
+        if (payload.len > frame.max_unfragmented_payload_len) return VineError.MessageTooLarge;
+
+        return .{
+            .header = .{
+                .kind = .data,
                 .session_id = self.session_id.value,
                 .payload_len = @intCast(payload.len),
             },
