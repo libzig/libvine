@@ -25,3 +25,44 @@ pub const NetworkId = struct {
         return std.mem.eql(u8, self.encode(), other.encode());
     }
 };
+
+pub const VineAddress = struct {
+    octets: [4]u8,
+
+    pub fn init(octets: [4]u8) VineAddress {
+        return .{ .octets = octets };
+    }
+
+    pub fn parse(text: []const u8) !VineAddress {
+        var iter = std.mem.splitScalar(u8, text, '.');
+        var octets: [4]u8 = undefined;
+        var index: usize = 0;
+
+        while (iter.next()) |part| {
+            if (index >= 4 or part.len == 0) return error.InvalidVineAddress;
+            octets[index] = try std.fmt.parseInt(u8, part, 10);
+            index += 1;
+        }
+
+        if (index != 4) return error.InvalidVineAddress;
+        return init(octets);
+    }
+
+    pub fn eql(self: VineAddress, other: VineAddress) bool {
+        return std.mem.eql(u8, &self.octets, &other.octets);
+    }
+
+    pub fn format(
+        self: VineAddress,
+        comptime _: []const u8,
+        _: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        try writer.print("{d}.{d}.{d}.{d}", .{
+            self.octets[0],
+            self.octets[1],
+            self.octets[2],
+            self.octets[3],
+        });
+    }
+};
