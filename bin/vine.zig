@@ -72,7 +72,11 @@ fn dispatch(command: Command, args: []const []const u8) !void {
     switch (command) {
         .identity => try libvine.cli.identity.run(args, default_identity_path),
         .config => try libvine.cli.config.run(args, default_config_path),
-        .daemon => std.debug.print("vine daemon: not implemented yet\n", .{}),
+        .daemon => try libvine.cli.daemon.run(args, default_config_path, .{
+            .pidfile_path = default_pidfile_path,
+            .state_path = default_runtime_state_path,
+            .log_path = default_log_path,
+        }),
         .status => std.debug.print("vine status: not implemented yet\n", .{}),
         .diagnostics => std.debug.print("vine diagnostics: not implemented yet\n", .{}),
     }
