@@ -495,3 +495,69 @@ test "integration signaling assisted path maps into preferred session" {
     try std.testing.expectEqual(integration.libmesh_adapter.ReachabilityPlan.Mode.signaling_then_direct, handle.plan.mode());
     try std.testing.expectEqual(@as(u64, 51), forwarder.forwardOutbound(&packet).?.session_id.value);
 }
+
+test "integration relay fallback continues carrying packets after direct session loss" {
+    const peer = core.types.PeerId.init(.{0x83} ** core.types.peer_id_len);
+    var routes = [_]core.route_table.RouteEntry{
+        .{
+            .prefix = try core.types.VinePrefix.parse("10.112.0.0/24"),
+            .peer_id = peer,
+            .session_id = core.types.SessionId.init(61),
+            .epoch = core.types.MembershipEpoch.init(1),
+            .preference = .direct,
+        },
+    };
+    var sessions = [_]core.session_table.ActiveSession{
+        .{
+            .peer_id = peer,
+            .session_id = core.types.SessionId.init(61),
+            .preference = .direct,
+        },
+        .{
+            .peer_id = peer,
+            .session_id = core.types.SessionId.init(62),
+            .preference = .relay,
+        },
+    };
+    var memberships = [_]core.membership.PeerMembership{};
+
+    var node = try Node.init(.{
+        .network_id = try core.types.NetworkId.init("devnet"),
+        .tun = .{
+            .ifname = [_]u8{ 'v', 'n', 'a', '0' } ++ ([_]u8{0} ** 12),
+            .local_address = core.types.VineAddress.init(.{ 10, 107, 0, 1 }),
+            .prefix_len = 24,
+        },
+    }, .{
+        .routes = &routes,
+        .sessions = &sessions,
+        .memberships = &memberships,
+    });
+
+    const candidate = integration.libmesh_adapter.CandidatePeer{
+        .peer_id = peer,
+        .node_id = @import("libmesh").Foundation.NodeId.fromPublicKey(peer.bytes),
+    };
+    node.mesh = integration.libmesh_adapter.LibmeshAdapter.withReachability(
+        &.{candidate},
+        &.{.{ .relay = candidate }},
+    );
+
+    const packet = @import("../testing/fixtures.zig").packet(.{ 10, 107, 0, 1 }, .{ 10, 112, 0, 9 });
+    var forwarder = core.forwarder.Forwarder{
+        .routes = &node.route_table,
+        .sessions = &node.session_table,
+        .tun = &node.tun,
+        .local_peer_id = node.local_peer_id,
+    };
+
+    try std.testing.expectEqual(@as(u64, 61), forwarder.forwardOutbound(&packet).?.session_id.value);
+    try std.testing.expect(forwarder.cleanupStaleSession(peer));
+    sessions[0] = .{
+        .peer_id = peer,
+        .session_id = core.types.SessionId.init(62),
+        .preference = .relay,
+    };
+    try std.testing.expectEqual(@as(u64, 62), node.session_table.preferredForPeer(peer).?.session_id.value);
+    try std.testing.expect(forwarder.forwardInbound(peer, &packet));
+}
