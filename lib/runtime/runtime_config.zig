@@ -232,3 +232,69 @@ test "runtime config loads node config from persisted config and identity files"
     try std.testing.expectEqual(@as(usize, 1), loaded.relay_peers.len);
     try std.testing.expect(loaded.relay_peers[0].eql(stored.bound.peer_id));
 }
+
+test "runtime config translates multiple configured peers into startup state" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const root = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(root);
+    const identity_path = try std.fmt.allocPrint(std.testing.allocator, "{s}/identity", .{root});
+    defer std.testing.allocator.free(identity_path);
+    _ = try identity_store.generateAndWrite(identity_path);
+
+    const peer_a = core.types.PeerId.init(.{0x41} ** core.types.peer_id_len);
+    const peer_b = core.types.PeerId.init(.{0x42} ** core.types.peer_id_len);
+
+    const config_path = try std.fmt.allocPrint(std.testing.allocator, "{s}/vine.toml", .{root});
+    defer std.testing.allocator.free(config_path);
+    const config_body = try std.fmt.allocPrint(
+        std.testing.allocator,
+        \\[node]
+        \\name = "alpha"
+        \\network_id = "home-net"
+        \\identity_path = "{s}"
+        \\
+        \\[tun]
+        \\name = "vine0"
+        \\address = "10.42.0.1"
+        \\prefix_len = 24
+        \\mtu = 1300
+        \\
+        \\[[bootstrap_peers]]
+        \\peer_id = "{f}"
+        \\address = "udp://198.51.100.10:4100"
+        \\
+        \\[[bootstrap_peers]]
+        \\peer_id = "{f}"
+        \\address = "udp://198.51.100.11:4100"
+        \\
+        \\[[allowed_peers]]
+        \\peer_id = "{f}"
+        \\prefix = "10.42.1.0/24"
+        \\relay_capable = false
+        \\
+        \\[[allowed_peers]]
+        \\peer_id = "{f}"
+        \\prefix = "10.42.254.0/24"
+        \\relay_capable = true
+        \\
+        \\[policy]
+        \\strict_allowlist = true
+        \\allow_relay = false
+        \\allow_signaling_upgrade = true
+        ,
+        .{ identity_path, peer_a, peer_b, peer_a, peer_b },
+    );
+    defer std.testing.allocator.free(config_body);
+    try tmp.dir.writeFile(.{ .sub_path = "vine.toml", .data = config_body });
+
+    var loaded = try load(std.testing.allocator, config_path);
+    defer loaded.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(@as(usize, 2), loaded.startup_bootstrap_peers.len);
+    try std.testing.expectEqual(@as(usize, 2), loaded.node_config.allowlist.len);
+    try std.testing.expectEqual(@as(usize, 1), loaded.relay_peers.len);
+    try std.testing.expect(loaded.relay_peers[0].eql(peer_b));
+    try std.testing.expect(!loaded.node_config.policy.allow_relay);
+}
