@@ -71,6 +71,19 @@ pub const SessionManager = struct {
         });
     }
 
+    pub fn failPreferredPath(self: *SessionManager, peer_id: core.types.PeerId) ?core.session_table.ActiveSession {
+        for (self.sessions.sessions) |*session| {
+            if (!session.peer_id.eql(peer_id)) continue;
+            if (session.preference == .relay) continue;
+            session.* = .{
+                .peer_id = core.types.PeerId.init(.{0} ** core.types.peer_id_len),
+                .session_id = .{ .value = 0 },
+                .preference = .relay,
+            };
+        }
+        return self.sessions.fallbackToRelay(peer_id);
+    }
+
     pub fn trackHandle(
         self: *SessionManager,
         peer: ManagedPeer,
@@ -403,4 +416,33 @@ test "session manager promotes sessions when better paths appear" {
     }));
     try @import("std").testing.expectEqual(@as(u64, 22), manager.preferredSessionForPeer(peer.peer_id).?.session_id.value);
     try @import("std").testing.expectEqual(@as(u64, 20), manager.sessions.fallbackToRelay(peer.peer_id).?.session_id.value);
+}
+
+test "session manager falls back to relay when preferred paths die" {
+    const peer = ManagedPeer{
+        .peer_id = core.types.PeerId.init(.{0x81} ** core.types.peer_id_len),
+        .relay_capable = true,
+    };
+    var sessions = [_]core.session_table.ActiveSession{
+        .{
+            .peer_id = peer.peer_id,
+            .session_id = .{ .value = 30 },
+            .preference = .relay,
+        },
+        .{
+            .peer_id = peer.peer_id,
+            .session_id = .{ .value = 31 },
+            .preference = .direct,
+        },
+        .{
+            .peer_id = peer.peer_id,
+            .session_id = .{ .value = 32 },
+            .preference = .direct_after_signaling,
+        },
+    };
+    var manager = SessionManager.init(&.{peer}, &sessions);
+
+    try @import("std").testing.expectEqual(@as(u64, 31), manager.preferredSessionForPeer(peer.peer_id).?.session_id.value);
+    try @import("std").testing.expectEqual(@as(u64, 30), manager.failPreferredPath(peer.peer_id).?.session_id.value);
+    try @import("std").testing.expectEqual(@as(u64, 30), manager.preferredSessionForPeer(peer.peer_id).?.session_id.value);
 }
