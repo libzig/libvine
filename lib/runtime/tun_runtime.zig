@@ -91,6 +91,22 @@ pub const TunRuntime = struct {
         return session;
     }
 
+    pub fn withdrawPeerMembership(self: *TunRuntime, peer_id: core.types.PeerId) bool {
+        var changed = false;
+        for (self.node.route_table.entries) |*entry| {
+            if (!entry.peer_id.eql(peer_id)) continue;
+            for (self.installed_routes) |*installed| {
+                if (installed.prefix.network.eql(entry.prefix.network) and installed.prefix.prefix_len == entry.prefix.prefix_len) {
+                    linux.routes.withdraw(installed);
+                }
+            }
+            if (self.node.route_table.withdraw(entry.prefix)) {
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
     fn isAuthorizedPeer(self: TunRuntime, peer_id: core.types.PeerId) bool {
         for (self.node.config.allowlist) |allowed| {
             if (allowed.eql(peer_id)) return true;
@@ -417,4 +433,44 @@ test "tun runtime drops packets from unauthorized peers" {
 
     try std.testing.expect(!runtime.receivePacketFromSession(unauthorized, &packet));
     try std.testing.expectEqual(TunRuntime.DropReason.unauthorized_peer, runtime.last_drop.?);
+}
+
+test "tun runtime detaches routes when membership is withdrawn" {
+    const std = @import("std");
+
+    const peer = core.types.PeerId.init(.{0x77} ** core.types.peer_id_len);
+    const prefix = try core.types.VinePrefix.parse("10.42.11.0/24");
+    var routes = [_]core.route_table.RouteEntry{
+        .{
+            .prefix = prefix,
+            .peer_id = peer,
+            .session_id = .{ .value = 81 },
+            .epoch = .{ .value = 1 },
+            .preference = .relay,
+        },
+    };
+    var sessions = [_]core.session_table.ActiveSession{};
+    var memberships = [_]core.membership.PeerMembership{};
+    var installed = [_]linux.routes.InstalledRoute{
+        .{ .prefix = prefix, .active = true },
+    };
+
+    var node = try api.node.Node.init(.{
+        .network_id = try core.types.NetworkId.init("home-net"),
+        .tun = .{
+            .ifname = [_]u8{ 'v', 'i', 'n', 'e', '8', 0 } ++ ([_]u8{0} ** 10),
+            .local_address = try core.types.VineAddress.parse("10.42.0.1"),
+            .prefix_len = 24,
+            .mtu = 1400,
+        },
+    }, .{
+        .routes = &routes,
+        .sessions = &sessions,
+        .memberships = &memberships,
+    });
+    var runtime = TunRuntime.init(&node, &installed);
+
+    try std.testing.expect(runtime.withdrawPeerMembership(peer));
+    try std.testing.expect(runtime.node.route_table.entries[0].tombstone);
+    try std.testing.expect(!runtime.installed_routes[0].active);
 }
