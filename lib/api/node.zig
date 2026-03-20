@@ -7,6 +7,7 @@ const linux = @import("../linux/linux.zig");
 pub const RuntimeBuffers = struct {
     routes: []core.route_table.RouteEntry,
     sessions: []core.session_table.ActiveSession,
+    memberships: []core.membership.PeerMembership,
 };
 
 pub const BootstrapSource = enum {
@@ -23,6 +24,7 @@ pub const Node = struct {
     config: config.NodeConfig,
     local_peer_id: core.types.PeerId,
     local_membership: ?core.membership.LocalMembership = null,
+    remote_memberships: []core.membership.PeerMembership,
     route_table: core.route_table.RouteTable,
     session_table: core.session_table.SessionTable,
     mesh: integration.libmesh_adapter.LibmeshAdapter = integration.libmesh_adapter.LibmeshAdapter.init(),
@@ -46,6 +48,7 @@ pub const Node = struct {
                 .epoch = core.types.MembershipEpoch.init(1),
                 .attached_at_ms = 0,
             },
+            .remote_memberships = buffers.memberships,
             .route_table = core.route_table.RouteTable.init(buffers.routes),
             .session_table = core.session_table.SessionTable.init(buffers.sessions),
             .tun = tun,
@@ -90,6 +93,26 @@ pub const Node = struct {
         self.advertised_local_membership = true;
         return local_membership;
     }
+
+    pub fn refreshRemoteMembership(self: *Node, membership: core.membership.PeerMembership) bool {
+        for (self.remote_memberships) |*existing| {
+            if (existing.peer_id.eql(membership.peer_id)) {
+                existing.* = membership;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    pub fn withdrawRemoteMembership(self: *Node, peer_id: core.types.PeerId) bool {
+        for (self.remote_memberships) |*membership| {
+            if (membership.peer_id.eql(peer_id)) {
+                membership.expires_at_ms = 0;
+                return self.route_table.withdraw(membership.prefix);
+            }
+        }
+        return false;
+    }
 };
 
 fn derivePeerId(source: config.IdentitySource) core.types.PeerId {
@@ -108,6 +131,7 @@ fn derivePeerId(source: config.IdentitySource) core.types.PeerId {
 test "node init wires identity membership tun and state tables" {
     var routes = [_]core.route_table.RouteEntry{};
     var sessions = [_]core.session_table.ActiveSession{};
+    var memberships = [_]core.membership.PeerMembership{};
 
     const node = try Node.init(.{
         .identity = .{ .inline_seed = [_]u8{9} ** 32 },
@@ -120,6 +144,7 @@ test "node init wires identity membership tun and state tables" {
     }, .{
         .routes = &routes,
         .sessions = &sessions,
+        .memberships = &memberships,
     });
 
     try std.testing.expectEqual(@as(usize, 0), node.route_table.entries.len);
@@ -132,6 +157,7 @@ test "node init wires identity membership tun and state tables" {
 test "node start and stop bound runtime ownership" {
     var routes = [_]core.route_table.RouteEntry{};
     var sessions = [_]core.session_table.ActiveSession{};
+    var memberships = [_]core.membership.PeerMembership{};
 
     var node = try Node.init(.{
         .network_id = try core.types.NetworkId.init("devnet"),
@@ -143,6 +169,7 @@ test "node start and stop bound runtime ownership" {
     }, .{
         .routes = &routes,
         .sessions = &sessions,
+        .memberships = &memberships,
     });
 
     try std.testing.expect(!node.running);
@@ -156,6 +183,7 @@ test "node start and stop bound runtime ownership" {
 test "node bootstrap prefers static peers and falls back to seed records" {
     var routes = [_]core.route_table.RouteEntry{};
     var sessions = [_]core.session_table.ActiveSession{};
+    var memberships = [_]core.membership.PeerMembership{};
     const peer = core.types.PeerId.init(.{0x42} ** core.types.peer_id_len);
 
     var node = try Node.init(.{
@@ -170,6 +198,7 @@ test "node bootstrap prefers static peers and falls back to seed records" {
     }, .{
         .routes = &routes,
         .sessions = &sessions,
+        .memberships = &memberships,
     });
 
     const static_result = node.bootstrap().?;
@@ -187,6 +216,7 @@ test "node bootstrap prefers static peers and falls back to seed records" {
     }, .{
         .routes = &routes,
         .sessions = &sessions,
+        .memberships = &memberships,
     });
 
     const seed_result = seed_only_node.bootstrap().?;
@@ -197,6 +227,7 @@ test "node bootstrap prefers static peers and falls back to seed records" {
 test "node start advertises local membership" {
     var routes = [_]core.route_table.RouteEntry{};
     var sessions = [_]core.session_table.ActiveSession{};
+    var memberships = [_]core.membership.PeerMembership{};
 
     var node = try Node.init(.{
         .network_id = try core.types.NetworkId.init("devnet"),
@@ -208,9 +239,54 @@ test "node start advertises local membership" {
     }, .{
         .routes = &routes,
         .sessions = &sessions,
+        .memberships = &memberships,
     });
 
     node.start();
     try std.testing.expect(node.advertised_local_membership);
     try std.testing.expect(node.advertiseLocalMembership() != null);
+}
+
+test "node refreshes and withdraws remote membership state" {
+    var routes = [_]core.route_table.RouteEntry{
+        .{
+            .prefix = try core.types.VinePrefix.parse("10.65.0.0/24"),
+            .peer_id = core.types.PeerId.init(.{0x55} ** core.types.peer_id_len),
+            .session_id = core.types.SessionId.init(12),
+            .epoch = core.types.MembershipEpoch.init(1),
+            .preference = .direct,
+        },
+    };
+    var sessions = [_]core.session_table.ActiveSession{};
+    var memberships = [_]core.membership.PeerMembership{
+        .{
+            .peer_id = core.types.PeerId.init(.{0x55} ** core.types.peer_id_len),
+            .prefix = try core.types.VinePrefix.parse("10.65.0.0/24"),
+            .epoch = core.types.MembershipEpoch.init(1),
+            .announced_at_ms = 1,
+        },
+    };
+
+    var node = try Node.init(.{
+        .network_id = try core.types.NetworkId.init("devnet"),
+        .tun = .{
+            .ifname = [_]u8{ 'v', 'n', '6', 0 } ++ ([_]u8{0} ** 12),
+            .local_address = core.types.VineAddress.init(.{ 10, 66, 0, 1 }),
+            .prefix_len = 24,
+        },
+    }, .{
+        .routes = &routes,
+        .sessions = &sessions,
+        .memberships = &memberships,
+    });
+
+    try std.testing.expect(node.refreshRemoteMembership(.{
+        .peer_id = core.types.PeerId.init(.{0x55} ** core.types.peer_id_len),
+        .prefix = try core.types.VinePrefix.parse("10.65.0.0/24"),
+        .epoch = core.types.MembershipEpoch.init(2),
+        .announced_at_ms = 2,
+    }));
+    try std.testing.expectEqual(@as(u64, 2), node.remote_memberships[0].epoch.value);
+    try std.testing.expect(node.withdrawRemoteMembership(core.types.PeerId.init(.{0x55} ** core.types.peer_id_len)));
+    try std.testing.expect(node.route_table.entries[0].tombstone);
 }
